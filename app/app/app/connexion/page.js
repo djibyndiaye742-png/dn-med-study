@@ -1,12 +1,12 @@
+
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { auth } from "../../../../lib/firebase";
 
 export default function Connexion() {
   const [email, setEmail] = useState("");
@@ -20,19 +20,19 @@ export default function Connexion() {
     setChargement(true);
     setMessage("");
 
-    const resultat = inscription
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+    try {
+      if (inscription) {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
 
-    if (resultat.error) {
-      setMessage(resultat.error.message);
-    } else if (inscription) {
-      setMessage("Compte créé. Vérifie ton adresse e-mail pour confirmer ton inscription.");
-    } else {
-      setMessage("Connexion réussie !");
+      window.location.href = "/";
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setChargement(false);
     }
-
-    setChargement(false);
   }
 
   return (
@@ -52,27 +52,17 @@ export default function Connexion() {
         maxWidth: 400,
         boxSizing: "border-box"
       }}>
-        <h1 style={{ color: "#1769aa" }}>🩺 DN Med Study</h1>
+        <h1 style={{ color: "#1769aa" }}>DN Med Study</h1>
         <h2>{inscription ? "Créer un compte" : "Connexion"}</h2>
 
         <label>Adresse e-mail</label>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          style={styleInput}
-        />
+        <input type="email" required value={email}
+          onChange={e => setEmail(e.target.value)} style={styleInput} />
 
         <label>Mot de passe</label>
-        <input
-          type="password"
-          required
-          minLength={6}
+        <input type="password" required minLength={6}
           value={password}
-          onChange={e => setPassword(e.target.value)}
-          style={styleInput}
-        />
+          onChange={e => setPassword(e.target.value)} style={styleInput} />
 
         <button type="submit" disabled={chargement} style={styleButton}>
           {chargement ? "Patiente..." : inscription ? "Créer mon compte" : "Se connecter"}
