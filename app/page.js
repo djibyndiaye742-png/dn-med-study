@@ -3,102 +3,37 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import {
-  doc,
-  getDoc,
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  orderBy,
-  serverTimestamp
-} from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
-
-const cours = [
-  {
-    matiere: "Anatomie",
-    titre: "Le système cardiovasculaire",
-    contenu: "Le système cardiovasculaire comprend le cœur et les vaisseaux sanguins. Le cœur assure la circulation du sang dans l'organisme.",
-    resume: "Le cœur possède quatre cavités : deux oreillettes et deux ventricules. Il assure la circulation pulmonaire et systémique."
-  },
-  {
-    matiere: "Physiologie",
-    titre: "La respiration",
-    contenu: "La respiration permet les échanges gazeux entre l'organisme et son environnement. Elle comprend la ventilation, les échanges alvéolaires et le transport des gaz.",
-    resume: "L'oxygène passe des alvéoles vers le sang. Le dioxyde de carbone suit le trajet inverse."
-  },
-  {
-    matiere: "Biochimie",
-    titre: "Les glucides",
-    contenu: "Les glucides sont des molécules énergétiques. On distingue les monosaccharides, les disaccharides et les polysaccharides.",
-    resume: "Le glucose est une source énergétique majeure pour les cellules."
-  }
-];
-
-const questions = [
-  {
-    question: "Combien de cavités possède le cœur humain ?",
-    choix: ["Deux", "Trois", "Quatre", "Six"],
-    reponse: 2,
-    explication: "Le cœur humain possède deux oreillettes et deux ventricules."
-  },
-  {
-    question: "Où se déroulent les échanges gazeux pulmonaires ?",
-    choix: ["Dans la trachée", "Dans les alvéoles", "Dans le larynx", "Dans les bronches principales"],
-    reponse: 1,
-    explication: "Les échanges gazeux ont lieu au niveau de la membrane alvéolocapillaire."
-  },
-  {
-    question: "Quel est le principal sucre utilisé par les cellules ?",
-    choix: ["Glucose", "Cellulose", "Lactose", "Amidon"],
-    reponse: 0,
-    explication: "Le glucose est un substrat énergétique important des cellules."
-  }
-];
 
 export default function Home() {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
-  const [profil, setProfil] = useState({});
-  const [onglet, setOnglet] = useState("Accueil");
-  const [historique, setHistorique] = useState([]);
-  const [question, setQuestion] = useState(0);
-  const [choix, setChoix] = useState({});
-  const [termine, setTermine] = useState(false);
+  const [nom, setNom] = useState("Étudiant");
+  const [fichier, setFichier] = useState(null);
+  const [action, setAction] = useState("");
+  const [resultat, setResultat] = useState("");
+  const [question, setQuestion] = useState("");
+  const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (utilisateur) => {
-      if (!utilisateur) {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
         router.replace("/connexion");
         return;
       }
 
-      setUser(utilisateur);
+      setUser(u);
 
       try {
-        const profilDoc = await getDoc(
-          doc(db, "users", utilisateur.uid)
-        );
-
-        if (profilDoc.exists()) {
-          setProfil(profilDoc.data());
+        const profil = await getDoc(doc(db, "users", u.uid));
+        if (profil.exists()) {
+          setNom(profil.data().prenom || u.displayName || "Étudiant");
         }
-
-        const resultats = await getDocs(
-          query(
-            collection(db, "users", utilisateur.uid, "resultats"),
-            orderBy("date", "desc")
-          )
-        );
-
-        setHistorique(
-          resultats.docs.map(d => ({ id: d.id, ...d.data() }))
-        );
-      } catch (error) {
-        console.error("Erreur de chargement :", error);
+      } catch (e) {
+        console.error(e);
       }
 
       setChargement(false);
@@ -112,25 +47,47 @@ export default function Home() {
     router.replace("/connexion");
   }
 
-  async function enregistrerResultat() {
-    const score = questions.filter(
-      (q, i) => choix[i] === q.reponse
-    ).length;
+  async function analyser(type) {
+    setErreur("");
+    setResultat("");
+
+    if (!fichier) {
+      setErreur("Choisis d'abord un cours au format PDF.");
+      return;
+    }
+
+    if (type === "chat" && !question.trim()) {
+      setErreur("Écris d'abord ta question.");
+      return;
+    }
+
+    setAction(type);
 
     try {
-      await addDoc(
-        collection(db, "users", user.uid, "resultats"),
-        {
-          score,
-          total: questions.length,
-          date: serverTimestamp(),
-          activite: "QCM général"
-        }
-      );
+      const formData = new FormData();
+      formData.append("fichier", fichier);
+      formData.append("action", type);
 
-      setTermine(true);
-    } catch (error) {
-      alert("Impossible de sauvegarder le résultat.");
+      if (type === "chat") {
+        formData.append("question", question);
+      }
+
+      const response = await fetch("/api/ia", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erreur pendant l'analyse.");
+      }
+
+      setResultat(data.resultat);
+    } catch (e) {
+      setErreur(e.message);
+    } finally {
+      setAction("");
     }
   }
 
@@ -140,188 +97,124 @@ export default function Home() {
 
   if (!user) return null;
 
-  const nom = profil.prenom || user.displayName || "Étudiant";
-
   return (
     <main style={page}>
       <header style={header}>
-        <h2>DN Med Study 🩺</h2>
-        <button onClick={deconnexion} style={logout}>
+        <div>
+          <h2>DN Med Study 🩺</h2>
+          <small>Plateforme intelligente de médecine</small>
+        </div>
+
+        <button style={logout} onClick={deconnexion}>
           Déconnexion
         </button>
       </header>
 
-      <div style={layout}>
-        <nav style={menu}>
-          {["Accueil", "Cours", "Résumés", "QCM", "PDF", "Profil"].map(item => (
+      <section style={container}>
+        <h1>Bienvenue, {nom} !</h1>
+        <p>Ton assistant intelligent de révision médicale.</p>
+
+        <article style={card}>
+          <h2>1. Importer un cours</h2>
+          <p>Sélectionne un document PDF contenant ton cours.</p>
+
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => {
+              setFichier(e.target.files?.[0] || null);
+              setResultat("");
+              setErreur("");
+            }}
+          />
+
+          {fichier && (
+            <p style={{ color: "#0f766e" }}>
+              Document sélectionné : {fichier.name}
+            </p>
+          )}
+        </article>
+
+        <article style={card}>
+          <h2>2. Travailler avec Gemini</h2>
+
+          <div style={grid}>
             <button
-              key={item}
-              onClick={() => setOnglet(item)}
-              style={{
-                ...menuButton,
-                background: onglet === item ? "#0f766e" : "transparent",
-                color: onglet === item ? "white" : "#334155"
+              style={button}
+              disabled={!!action}
+              onClick={() => analyser("resume")}
+            >
+              Générer un résumé
+            </button>
+
+            <button
+              style={button}
+              disabled={!!action}
+              onClick={() => analyser("qcm")}
+            >
+              Générer des QCM
+            </button>
+
+            <button
+              style={button}
+              disabled={!!action}
+              onClick={() => analyser("flashcards")}
+            >
+              Créer des flashcards
+            </button>
+          </div>
+        </article>
+
+        <article style={card}>
+          <h2>3. Ton tuteur médical IA</h2>
+          <p>Pose une question sur le contenu de ton PDF.</p>
+
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Exemple : explique-moi le mécanisme de la respiration..."
+            style={textarea}
+          />
+
+          <button
+            style={button}
+            disabled={!!action}
+            onClick={() => analyser("chat")}
+          >
+            Poser ma question
+          </button>
+        </article>
+
+        {action && (
+          <article style={card}>
+            <h3>Gemini analyse ton cours...</h3>
+            <p>Patiente quelques instants.</p>
+          </article>
+        )}
+
+        {erreur && (
+          <article style={{ ...card, color: "#b91c1c" }}>
+            <strong>Erreur :</strong> {erreur}
+          </article>
+        )}
+
+        {resultat && (
+          <article style={resultCard}>
+            <h2>Résultat de l'analyse</h2>
+            <div style={resultText}>{resultat}</div>
+
+            <button
+              style={button}
+              onClick={() => {
+                navigator.clipboard.writeText(resultat);
+                alert("Résultat copié !");
               }}
             >
-              {item}
+              Copier le résultat
             </button>
-          ))}
-        </nav>
-
-        <section style={content}>
-          {onglet === "Accueil" && (
-            <>
-              <h1>Bienvenue, {nom} !</h1>
-              <p>Ton espace personnel de révision médicale.</p>
-
-              <div style={grid}>
-                {["Cours", "Résumés", "QCM", "PDF"].map(item => (
-                  <button
-                    key={item}
-                    style={card}
-                    onClick={() => setOnglet(item)}
-                  >
-                    <h2>{item}</h2>
-                    <p>Accéder à {item.toLowerCase()}</p>
-                  </button>
-                ))}
-              </div>
-
-              <h2>Derniers résultats</h2>
-              {historique.length === 0
-                ? <p>Aucun résultat enregistré.</p>
-                : historique.slice(0, 5).map(r => (
-                  <p key={r.id}>
-                    {r.activite} : {r.score}/{r.total}
-                  </p>
-                ))
-              }
-            </>
-          )}
-
-          {onglet === "Cours" && (
-            <>
-              <h1>Cours de médecine</h1>
-              {cours.map(c => (
-                <article style={article} key={c.titre}>
-                  <small>{c.matiere}</small>
-                  <h2>{c.titre}</h2>
-                  <p>{c.contenu}</p>
-                </article>
-              ))}
-            </>
-          )}
-
-          {onglet === "Résumés" && (
-            <>
-              <h1>Fiches de révision</h1>
-              {cours.map(c => (
-                <article style={article} key={c.titre}>
-                  <small>{c.matiere}</small>
-                  <h2>{c.titre}</h2>
-                  <p>{c.resume}</p>
-                </article>
-              ))}
-            </>
-          )}
-
-          {onglet === "QCM" && (
-            <>
-              <h1>QCM de révision</h1>
-
-              {!termine ? (
-                <>
-                  <p>Question {question + 1} sur {questions.length}</p>
-                  <h2>{questions[question].question}</h2>
-
-                  {questions[question].choix.map((c, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setChoix({ ...choix, [question]: i })}
-                      style={{
-                        ...option,
-                        background: choix[question] === i ? "#ccfbf1" : "white"
-                      }}
-                    >
-                      {c}
-                    </button>
-                  ))}
-
-                  {question < questions.length - 1 ? (
-                    <button
-                      style={action}
-                      disabled={choix[question] === undefined}
-                      onClick={() => setQuestion(question + 1)}
-                    >
-                      Question suivante
-                    </button>
-                  ) : (
-                    <button
-                      style={action}
-                      disabled={Object.keys(choix).length !== questions.length}
-                      onClick={enregistrerResultat}
-                    >
-                      Terminer et enregistrer
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <h2>Résultat du QCM</h2>
-                  <h1>
-                    {questions.filter((q, i) => choix[i] === q.reponse).length}
-                    /{questions.length}
-                  </h1>
-
-                  {questions.map((q, i) => (
-                    <article style={article} key={i}>
-                      <p>{q.question}</p>
-                      <p>
-                        {choix[i] === q.reponse
-                          ? "Bonne réponse"
-                          : "Réponse incorrecte"}
-                      </p>
-                      <p>Correction : {q.choix[q.reponse]}</p>
-                      <p>{q.explication}</p>
-                    </article>
-                  ))}
-
-                  <button
-                    style={action}
-                    onClick={() => {
-                      setQuestion(0);
-                      setChoix({});
-                      setTermine(false);
-                    }}
-                  >
-                    Recommencer
-                  </button>
-                </>
-              )}
-            </>
-          )}
-
-          {onglet === "PDF" && (
-            <>
-              <h1>Bibliothèque PDF</h1>
-              <p>Les documents pédagogiques seront ajoutés ici.</p>
-              <p>Aucun document PDF n'est encore disponible.</p>
-            </>
-          )}
-
-          {onglet === "Profil" && (
-            <>
-              <h1>Mon profil étudiant</h1>
-              <article style={article}>
-                <p>Prénom : {profil.prenom || "Non renseigné"}</p>
-                <p>Nom : {profil.nom || "Non renseigné"}</p>
-                <p>Email : {user.email}</p>
-                <p>Identifiant : {user.uid}</p>
-              </article>
-            </>
-          )}
-        </section>
-      </div>
+          </article>
+        )}
+      </section>
     </main>
   );
 }
@@ -342,89 +235,70 @@ const center = {
 const header = {
   background: "#0f766e",
   color: "white",
-  padding: "15px 20px",
+  padding: "18px 22px",
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center"
-};
-
-const layout = {
-  display: "flex",
+  alignItems: "center",
   flexWrap: "wrap",
-  gap: 15,
-  padding: 15
+  gap: 12
 };
 
-const menu = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-  width: 150
-};
-
-const menuButton = {
-  padding: 12,
-  border: "none",
-  borderRadius: 8,
-  textAlign: "left",
-  cursor: "pointer"
-};
-
-const content = {
-  flex: 1,
-  minWidth: 260,
-  background: "white",
-  borderRadius: 12,
+const container = {
+  maxWidth: 950,
+  margin: "auto",
   padding: 20
+};
+
+const card = {
+  background: "white",
+  padding: 22,
+  marginTop: 20,
+  borderRadius: 12,
+  boxShadow: "0 2px 8px #0000000d"
 };
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
   gap: 12
 };
 
-const card = {
-  background: "#f0fdfa",
-  border: "1px solid #ccfbf1",
-  padding: 15,
-  borderRadius: 10,
-  textAlign: "left",
-  cursor: "pointer"
-};
-
-const article = {
-  padding: 15,
-  margin: "15px 0",
-  background: "#f8fafc",
-  borderRadius: 10,
-  lineHeight: 1.6
-};
-
-const option = {
-  display: "block",
-  width: "100%",
-  textAlign: "left",
-  padding: 13,
-  margin: "8px 0",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  cursor: "pointer"
-};
-
-const action = {
-  padding: 13,
-  marginTop: 15,
+const button = {
   background: "#0f766e",
   color: "white",
   border: "none",
   borderRadius: 8,
+  padding: 14,
+  marginTop: 10,
   cursor: "pointer"
 };
 
 const logout = {
-  padding: 9,
+  padding: 10,
   border: "none",
   borderRadius: 7,
   cursor: "pointer"
+};
+
+const textarea = {
+  display: "block",
+  width: "100%",
+  minHeight: 100,
+  padding: 12,
+  marginTop: 12,
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  boxSizing: "border-box"
+};
+
+const resultCard = {
+  ...card,
+  border: "1px solid #99f6e4"
+};
+
+const resultText = {
+  whiteSpace: "pre-wrap",
+  lineHeight: 1.8,
+  margin: "20px 0",
+  overflowWrap: "anywhere"
 };
