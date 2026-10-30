@@ -1,8 +1,37 @@
-
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+const MODELS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite"
+];
+
+const PROMPTS = {
+  resume: `Tu es un professeur de médecine universitaire.
+Analyse attentivement le cours fourni.
+Produis un résumé détaillé, clair et structuré avec :
+- Définitions
+- Explications et mécanismes
+- Classifications
+- Points essentiels à mémoriser
+- Notions importantes pour les examens
+N'invente aucune information absente du document.`,
+
+  qcm: `Tu es un enseignant en médecine universitaire.
+Crée 15 QCM de niveau deuxième année médecine à partir du cours.
+Chaque question comporte 4 propositions A, B, C et D.
+Indique les bonnes réponses et explique chaque correction.
+Respecte strictement les informations du document.`,
+
+  flashcards: `Crée 20 flashcards médicales à partir du cours.
+Chaque carte contient une question précise et une réponse claire.
+Privilégie les définitions, mécanismes, classifications et notions essentielles.
+N'invente aucune information.`,
+
+  chat: null
+};
 
 export async function POST(request) {
   try {
@@ -10,7 +39,7 @@ export async function POST(request) {
 
     if (!apiKey || !apiKey.trim()) {
       return NextResponse.json(
-        { error: "Clé Gemini absente. Vérifie les variables Vercel." },
+        { error: "Clé Gemini absente du serveur. Vérifie GEMINI_API_KEY sur Vercel." },
         { status: 500 }
       );
     }
@@ -18,51 +47,33 @@ export async function POST(request) {
     const formData = await request.formData();
     const fichier = formData.get("fichier");
     const action = formData.get("action");
-    const question = formData.get("question") || "";
+    const question = String(formData.get("question") || "");
 
     if (!fichier || typeof fichier.arrayBuffer !== "function") {
       return NextResponse.json(
-        { error: "Aucun PDF reçu." },
+        { error: "Aucun fichier PDF reçu." },
         { status: 400 }
       );
     }
 
-    if (!fichier.name.toLowerCase().endsWith(".pdf")) {
+    if (
+      !fichier.name?.toLowerCase().endsWith(".pdf") ||
+      fichier.type !== "application/pdf"
+    ) {
       return NextResponse.json(
-        { error: "Le fichier doit être un PDF." },
+        { error: "Le fichier doit être un PDF valide." },
         { status: 400 }
       );
     }
 
     if (fichier.size > 4 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "PDF trop volumineux. Essaie un fichier de moins de 4 Mo." },
+        { error: "PDF trop volumineux. Utilise un fichier de moins de 4 Mo." },
         { status: 413 }
       );
     }
 
-    const prompts = {
-      resume: `Tu es un professeur de médecine.
-Analyse attentivement ce cours et produis un résumé détaillé et structuré.
-Présente les définitions, mécanismes, classifications, notions importantes et points à mémoriser.
-N'invente aucune information absente du document.`,
-
-      qcm: `Tu es un enseignant en médecine.
-Crée 15 QCM de niveau universitaire exclusivement à partir du cours.
-Pour chaque question, propose 4 réponses, indique la ou les bonnes réponses et explique chaque correction.
-Ne crée aucune information non présente dans le document.`,
-
-      flashcards: `Crée 20 flashcards médicales à partir du cours.
-Chaque carte doit comporter une question précise et une réponse claire.
-Privilégie les définitions, mécanismes, classifications et notions essentielles.`,
-
-      chat: `Tu es un tuteur médical.
-Réponds à la question suivante en utilisant prioritairement le document.
-Si le document ne contient pas la réponse, indique-le clairement.
-Question : ${question}`
-    };
-
-    if (!prompts[action]) {
+    if (!["resume", "qcm", "flashcards", "chat"].includes(action)) {
       return NextResponse.json(
         { error: "Action inconnue." },
         { status: 400 }
@@ -71,96 +82,114 @@ Question : ${question}`
 
     if (action === "chat" && !question.trim()) {
       return NextResponse.json(
-        { error: "Écris une question." },
+        { error: "Écris une question avant de continuer." },
         { status: 400 }
       );
     }
+
+    const prompt = action === "chat"
+      ? `Tu es un tuteur médical.
+Réponds à la question en utilisant prioritairement le cours fourni.
+Si le cours ne contient pas la réponse, indique-le clairement.
+Question : ${question}`
+      : PROMPTS[action];
 
     const base64 = Buffer.from(
       await fichier.arrayBuffer()
     ).toString("base64");
 
-    const controller = new AbortController();
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 50000);
-
-    let response;
-
-    try {
-      response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompts[action] },
-                {
-                  inlineData: {
-                    mimeType: "application/pdf",
-                    data: base64
-                  }
-                }
-              ]
-            }],
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 8192
+    const body = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType: "application/pdf",
+              data: base64
             }
-          }),
-          signal: controller.signal
+          }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 8192
+      }
+    };
+
+    let lastError = null;
+
+    for (const model of MODELS) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000);
+
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal
+          }
+        );
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const resultat = data.candidates?.[0]?.content?.parts
+            ?.map(part => part.text || "")
+            .join("\n");
+
+          if (!resultat) {
+            return NextResponse.json(
+              { error: "Le modèle n'a retourné aucun texte. Réessaie." },
+              { status: 502 }
+            );
+          }
+
+          return NextResponse.json({ resultat, model });
         }
-      );
-    } finally {
-      clearTimeout(timeout);
+
+        lastError = data.error?.message || "Erreur Gemini.";
+
+        if (![429, 500, 503].includes(response.status)) {
+          return NextResponse.json(
+            { error: lastError, code: response.status },
+            { status: response.status }
+          );
+        }
+
+      } catch (error) {
+        if (error.name === "AbortError") {
+          lastError = "Le modèle met trop de temps à répondre.";
+        } else {
+          lastError = error.message;
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Erreur Gemini :", response.status, data);
-
-      return NextResponse.json(
-        {
-          error: data.error?.message || "Erreur de communication avec Gemini.",
-          code: response.status
-        },
-        { status: response.status }
-      );
-    }
-
-    const resultat = data.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
-      .join("\n");
-
-    if (!resultat) {
-      return NextResponse.json(
-        { error: "Gemini n'a retourné aucun texte." },
-        { status: 502 }
-      );
-    }
-
-    return NextResponse.json({ resultat });
+    return NextResponse.json(
+      {
+        error: "Les modèles Gemini sont momentanément indisponibles. Réessaie dans quelques minutes.",
+        details: lastError
+      },
+      { status: 503 }
+    );
 
   } catch (error) {
     console.error("Erreur moteur IA :", error);
 
-    if (error.name === "AbortError") {
-      return NextResponse.json(
-        { error: "Gemini met trop de temps à répondre. Essaie avec un PDF plus petit." },
-        { status: 504 }
-      );
-    }
-
     return NextResponse.json(
-      { error: error.message || "Erreur interne du serveur." },
+      { error: "Erreur interne : " + error.message },
       { status: 500 }
     );
   }
 }
+
+
+
