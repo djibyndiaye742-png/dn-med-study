@@ -54,7 +54,7 @@ def appeler_ia(prompt):
         cle = st.secrets["GEMINI_API_KEY"]
         client = genai.Client(api_key=cle)
         reponse = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=prompt
         )
         return reponse.text or "L'IA n'a pas fourni de réponse."
