@@ -2,7 +2,12 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "../../lib/supabase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
+import { auth } from "../../lib/firebase";
 
 export default function Connexion() {
   const [mode, setMode] = useState("signup");
@@ -21,11 +26,6 @@ export default function Connexion() {
     setSuccess(false);
 
     const cleanEmail = email.trim().toLowerCase();
-
-    if (!cleanEmail || !password) {
-      setMessage("Veuillez remplir tous les champs obligatoires.");
-      return;
-    }
 
     if (mode === "signup") {
       if (!nom.trim() || !prenom.trim()) {
@@ -48,42 +48,36 @@ export default function Connexion() {
 
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: {
-            data: {
-              nom: nom.trim(),
-              prenom: prenom.trim(),
-            },
-            emailRedirectTo: `${window.location.origin}/connexion`,
-          },
-        });
-
-        if (error) throw error;
-
-        if (data.session) {
-          window.location.href = "/";
-          return;
-        }
-
-        setSuccess(true);
-        setMessage(
-          "Inscription enregistrée. Consultez votre boîte e-mail pour confirmer votre adresse."
+        const result = await createUserWithEmailAndPassword(
+          auth,
+          cleanEmail,
+          password
         );
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
 
-        if (error) throw error;
+        await updateProfile(result.user, {
+          displayName: `${prenom.trim()} ${nom.trim()}`,
+        });
 
         window.location.href = "/";
-        return;
+      } else {
+        await signInWithEmailAndPassword(auth, cleanEmail, password);
+        window.location.href = "/";
       }
     } catch (error) {
-      setMessage(error.message || "Une erreur est survenue.");
+      const errors = {
+        "auth/email-already-in-use": "Cette adresse e-mail possède déjà un compte.",
+        "auth/invalid-email": "Adresse e-mail invalide.",
+        "auth/weak-password": "Le mot de passe est trop faible.",
+        "auth/invalid-credential": "E-mail ou mot de passe incorrect.",
+        "auth/user-not-found": "Aucun compte trouvé avec cette adresse.",
+        "auth/wrong-password": "Mot de passe incorrect.",
+        "auth/too-many-requests": "Trop de tentatives. Réessayez plus tard.",
+        "auth/network-request-failed": "Problème de connexion Internet.",
+      };
+
+      setMessage(
+        errors[error.code] || "Une erreur est survenue. Réessayez."
+      );
     } finally {
       setLoading(false);
     }
@@ -118,11 +112,7 @@ export default function Connexion() {
         maxWidth: "430px",
         boxShadow: "0 8px 30px rgba(0,0,0,0.07)",
       }}>
-        <h1 style={{
-          textAlign: "center",
-          color: "#123b70",
-          marginBottom: "8px",
-        }}>
+        <h1 style={{ textAlign: "center", color: "#123b70" }}>
           DN Med Study
         </h1>
 
@@ -142,59 +132,34 @@ export default function Connexion() {
           {mode === "signup" && (
             <>
               <label>Nom</label>
-              <input
-                style={field}
-                value={nom}
+              <input style={field} value={nom}
                 onChange={(e) => setNom(e.target.value)}
-                placeholder="Votre nom"
-                required
-              />
+                placeholder="Votre nom" required />
 
               <label>Prénom</label>
-              <input
-                style={field}
-                value={prenom}
+              <input style={field} value={prenom}
                 onChange={(e) => setPrenom(e.target.value)}
-                placeholder="Votre prénom"
-                required
-              />
+                placeholder="Votre prénom" required />
             </>
           )}
 
           <label>Adresse e-mail</label>
-          <input
-            style={field}
-            type="email"
-            value={email}
+          <input style={field} type="email" value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="exemple@email.com"
-            autoComplete="email"
-            required
-          />
+            placeholder="exemple@email.com" required />
 
           <label>Mot de passe</label>
-          <input
-            style={field}
-            type="password"
-            value={password}
+          <input style={field} type="password" value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="8 caractères minimum"
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            required
-          />
+            placeholder="8 caractères minimum" required />
 
           {mode === "signup" && (
             <>
               <label>Confirmer le mot de passe</label>
-              <input
-                style={field}
-                type="password"
+              <input style={field} type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Répétez votre mot de passe"
-                autoComplete="new-password"
-                required
-              />
+                placeholder="Répétez votre mot de passe" required />
             </>
           )}
 
@@ -205,53 +170,40 @@ export default function Connexion() {
               background: success ? "#ecfdf3" : "#fef2f2",
               color: success ? "#067647" : "#b42318",
               fontSize: "14px",
-              lineHeight: "1.5",
             }}>
               {message}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: "100%",
-              padding: "14px",
-              border: "none",
-              borderRadius: "9px",
-              background: loading ? "#64748b" : "#174b86",
-              color: "white",
-              fontSize: "16px",
-              fontWeight: "bold",
-              cursor: loading ? "wait" : "pointer",
-            }}
-          >
-            {loading
-              ? "Veuillez patienter..."
-              : mode === "signup"
-                ? "Créer mon compte"
-                : "Se connecter"}
+          <button type="submit" disabled={loading} style={{
+            width: "100%",
+            padding: "14px",
+            border: "none",
+            borderRadius: "9px",
+            background: "#174b86",
+            color: "white",
+            fontSize: "16px",
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}>
+            {loading ? "Veuillez patienter..." :
+              mode === "signup" ? "Créer mon compte" : "Se connecter"}
           </button>
         </form>
 
         <p style={{ textAlign: "center", marginTop: "22px" }}>
-          {mode === "signup" ? "Déjà inscrit ?" : "Pas encore de compte ?"}
-          {" "}
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === "signup" ? "login" : "signup");
-              setMessage("");
-              setSuccess(false);
-            }}
-            style={{
-              border: "none",
-              background: "none",
-              color: "#174b86",
-              fontWeight: "bold",
-              cursor: "pointer",
-            }}
-          >
+          {mode === "signup" ? "Déjà inscrit ?" : "Pas encore de compte ?"}{" "}
+          <button type="button" onClick={() => {
+            setMode(mode === "signup" ? "login" : "signup");
+            setMessage("");
+            setSuccess(false);
+          }} style={{
+            border: "none",
+            background: "none",
+            color: "#174b86",
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}>
             {mode === "signup" ? "Se connecter" : "Créer un compte"}
           </button>
         </p>
