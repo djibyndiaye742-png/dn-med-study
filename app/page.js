@@ -5,7 +5,7 @@ import {
   Home, BookOpen, Brain, ClipboardList, Sparkles,
   GraduationCap, CalendarDays, Layers, FileText,
   Search, Plus, X, Menu, ChevronRight, ArrowLeft,
-  Upload, ExternalLink, Trash2, Pencil, Clock,
+  Upload, ExternalLink, Trash2, Clock,
   ChartNoAxesCombined, FolderOpen, University,
   NotebookText, FilePlus2, Settings, LogOut,
   UserRound, CheckCircle2, LoaderCircle, Download,
@@ -15,127 +15,63 @@ import {
 } from "lucide-react";
 
 import {
-  collection, addDoc, getDocs, deleteDoc, doc,
-  query, orderBy, serverTimestamp, setDoc, getDoc
+  onAuthStateChanged,
+  signOut
+} from "firebase/auth";
+
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+  getDoc,
+  setDoc,
+  query,
+  where,
+  orderBy,
+  serverTimestamp
 } from "firebase/firestore";
 
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth, db } from "../lib/firebase";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import {
+  ref,
+  uploadBytesResumable,
+  getDownloadURL
+} from "firebase/storage";
 
-const storage = getStorage(auth.app);
+import { auth, db, storage } from "../lib/firebase";
 
-/* =====================================================
-   DN MED STUDY — PREMIUM V2
-===================================================== */
+import { useRouter } from "next/navigation";
 
 const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
 
-const COLORS = {
-  navy: "#10243A",
-  blue: "#2563EB",
-  cyan: "#06B6D4",
-  green: "#10B981",
-  background: "#F5F7FB"
-};
-
 const NAVIGATION = [
   { id: "home", label: "Accueil", icon: Home },
-  { id: "courses", label: "Mes cours", icon: BookOpen },
-  { id: "revision", label: "Réviser", icon: Brain },
+  { id: "courses", label: "Cours", icon: BookOpen },
   { id: "exams", label: "Examens", icon: ClipboardList },
-  { id: "ai", label: "Assistant IA", icon: Sparkles }
-];
-
-const TOOLS = [
-  {
-    id: "qcm",
-    title: "Générer des QCM",
-    description: "Teste tes connaissances et évalue ton niveau.",
-    icon: ClipboardList,
-    color: "#2563EB",
-    background: "#EAF1FF"
-  },
-  {
-    id: "flashcards",
-    title: "Flashcards",
-    description: "Mémorise les notions essentielles.",
-    icon: Layers,
-    color: "#7C3AED",
-    background: "#F1EAFE"
-  },
-  {
-    id: "resume",
-    title: "Résumés",
-    description: "Transforme tes cours en fiches de révision.",
-    icon: FileText,
-    color: "#0891B2",
-    background: "#E4F7FB"
-  }
+  { id: "revision", label: "Révisions", icon: Brain },
+  { id: "ai", label: "Assistant IA", icon: Sparkles },
+  { id: "admin", label: "Administration", icon: ShieldCheck },
+  { id: "settings", label: "Paramètres", icon: Settings }
 ];
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function getCourseUrl(item) {
-  return item.url || item.pdfUrl || item.fichierUrl || item.lien || "";
-}
-
-function formatDate(value) {
-  if (!value) return "Date inconnue";
-  const date = value?.toDate ? value.toDate() : new Date(value);
-  if (Number.isNaN(date.getTime())) return "Date inconnue";
-  return date.toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  });
-}
-
-/* =====================================================
-   COMPOSANTS VISUELS
-===================================================== */
-
-function IconTile({ icon: Icon, color, background, size = 27 }) {
-  return (
-    <div
-      className="icon-tile"
-      style={{ color, background }}
-    >
-      <Icon size={size} strokeWidth={1.8} />
-    </div>
-  );
-}
-
-function SectionTitle({ eyebrow, title, description, action }) {
-  return (
-    <div className="section-title">
-      <div>
-        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-        <h1>{title}</h1>
-        {description && <p>{description}</p>}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function EmptyState({ icon: Icon = FolderOpen, title, description }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-icon"><Icon size={35} /></div>
-      <h3>{title}</h3>
-      <p>{description}</p>
-    </div>
-  );
+function formatDate(date) {
+  if (!date) return "";
+  const d = date?.toDate ? date.toDate() : new Date(date);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString("fr-FR");
 }
 
 function Field({
   label,
   value,
   onChange,
-  placeholder,
+  placeholder = "",
   type = "text",
   required = false
 }) {
@@ -145,48 +81,61 @@ function Field({
       <input
         type={type}
         value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder || ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
         required={required}
       />
     </label>
   );
 }
 
-function SelectField({ label, value, onChange, options }) {
+function SelectField({
+  label,
+  value,
+  onChange,
+  options
+}) {
   return (
     <label className="field">
       <span>{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         <option value="">Sélectionner</option>
-        {options.map((option, index) => {
-          const optionValue =
-            typeof option === "string" ? option : option.value;
-
-          const optionLabel =
-            typeof option === "string" ? option : option.label;
-
-          return (
-            <option key={index} value={optionValue}>
-              {optionLabel}
-            </option>
-          );
-        })}
+        {options.map((option) => (
+          <option
+            key={typeof option === "string" ? option : option.value}
+            value={typeof option === "string" ? option : option.value}
+          >
+            {typeof option === "string" ? option : option.label}
+          </option>
+        ))}
       </select>
     </label>
   );
 }
 
-/* =====================================================
-   APPLICATION
-===================================================== */
+function EmptyState({ icon: Icon = FolderOpen, text }) {
+  return (
+    <div className="empty-state">
+      <Icon size={34} />
+      <p>{text}</p>
+    </div>
+  );
+}
 
 export default function HomePage() {
+  const router = useRouter();
+
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState({});
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
   const [active, setActive] = useState("home");
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [dark, setDark] = useState(false);
 
   const [courses, setCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -194,21 +143,16 @@ export default function HomePage() {
   const [history, setHistory] = useState([]);
 
   const [search, setSearch] = useState("");
-  const [filterUniversity, setFilterUniversity] = useState("");
-  const [filterLevel, setFilterLevel] = useState("");
-  const [filterSemester, setFilterSemester] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState(null);
+  const [filterSubject, setFilterSubject] = useState("");
 
   const [modal, setModal] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [dark, setDark] = useState(false);
 
   const [subjectForm, setSubjectForm] = useState({
-    universite: "",
-    filiere: "",
-    niveau: "",
-    semestre: "",
-    nom: ""
+    nom: "",
+    universite: "UCAD",
+    filiere: "Médecine",
+    niveau: "Deuxième année",
+    semestre: "Premier semestre"
   });
 
   const [courseForm, setCourseForm] = useState({
@@ -218,213 +162,101 @@ export default function HomePage() {
     description: ""
   });
 
-  const [lessonFile, setLessonFile] = useState(null);
-
   const [examForm, setExamForm] = useState({
     titre: "",
-    universite: "",
-    filiere: "",
-    niveau: "",
-    semestre: "",
-    matiere: "",
-    annee: "",
-    url: "",
-    correctionUrl: ""
+    matiereId: "",
+    sujetUrl: "",
+    correctionUrl: "",
+    annee: ""
   });
 
+  const [lessonFile, setLessonFile] = useState(null);
+  const [examFile, setExamFile] = useState(null);
+  const [correctionFile, setCorrectionFile] = useState(null);
+
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+
   const [aiFile, setAiFile] = useState(null);
-  const [aiResult, setAiResult] = useState("");
-  const [aiQuestion, setAiQuestion] = useState("");
   const [aiAction, setAiAction] = useState("resume");
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [aiResult, setAiResult] = useState("");
 
   const isAdmin =
     normalize(user?.email) === ADMIN_EMAIL.toLowerCase();
 
-  /* AUTHENTIFICATION */
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      async currentUser => {
-        if (!currentUser) {
-          window.location.href = "/connexion";
-          return;
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        router.replace("/connexion");
+        return;
+      }
+
+      setUser(currentUser);
+
+      try {
+        const profileRef = doc(db, "users", currentUser.uid);
+        const profileSnap = await getDoc(profileRef);
+
+        if (profileSnap.exists()) {
+          setProfile(profileSnap.data());
         }
 
-        setUser(currentUser);
-
-        try {
-          const profileSnap = await getDoc(
-            doc(db, "users", currentUser.uid)
-          );
-
-          if (profileSnap.exists()) {
-            setProfile(profileSnap.data());
-          }
-        } catch (error) {
-          console.error("Profil :", error);
-        }
-
+        await chargerDonnees(currentUser.uid);
+      } catch (error) {
+        console.error(error);
+      } finally {
         setLoading(false);
       }
-    );
+    });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
-  /* CHARGEMENT FIREBASE */
-
-  async function chargerDonnees() {
-    setBusy(true);
+  async function chargerDonnees(uid = user?.uid) {
+    if (!uid) return;
 
     try {
-      const [
-        courseSnap,
-        subjectSnap,
-        examSnap
-      ] = await Promise.all([
-        getDocs(collection(db, "cours")),
-        getDocs(collection(db, "matieres")),
-        getDocs(collection(db, "examens"))
-      ]);
+      const [coursesSnap, subjectsSnap, examsSnap, historySnap] =
+        await Promise.all([
+          getDocs(collection(db, "cours")),
+          getDocs(collection(db, "matieres")),
+          getDocs(collection(db, "examens")),
+          getDocs(
+            query(
+              collection(db, "users", uid, "resultats"),
+              orderBy("createdAt", "desc")
+            )
+          )
+        ]);
 
       setCourses(
-        courseSnap.docs.map(item => ({
-          id: item.id,
-          ...item.data()
-        }))
+        coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
       );
 
       setSubjects(
-        subjectSnap.docs.map(item => ({
-          id: item.id,
-          ...item.data()
-        }))
+        subjectsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
       );
 
       setExams(
-        examSnap.docs.map(item => ({
-          id: item.id,
-          ...item.data()
-        }))
+        examsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
       );
 
-      if (user?.uid) {
-        const historyQuery = query(
-          collection(db, "users", user.uid, "resultats"),
-          orderBy("createdAt", "desc")
-        );
-
-        const historySnap = await getDocs(historyQuery);
-
-        setHistory(
-          historySnap.docs.map(item => ({
-            id: item.id,
-            ...item.data()
-          }))
-        );
-      }
+      setHistory(
+        historySnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      );
     } catch (error) {
-      console.error("Chargement des données :", error);
-      alert(
-        "Impossible de charger certaines données : " +
-        (error.message || "Erreur Firebase")
-      );
-    } finally {
-      setBusy(false);
+      console.error("Chargement:", error);
     }
   }
-
-  useEffect(() => {
-    if (user?.uid) {
-      chargerDonnees();
-    }
-  }, [user?.uid]);
-    /* DONNÉES DE FILTRAGE */
-
-  const universities = useMemo(() => {
-    return [...new Set([
-      ...courses.map(c => c.universite || c.university),
-      ...subjects.map(s => s.universite)
-    ].filter(Boolean))].sort();
-  }, [courses, subjects]);
-
-  const levels = useMemo(() => {
-    return [...new Set([
-      ...courses.map(c => c.niveau || c.level),
-      ...subjects.map(s => s.niveau)
-    ].filter(Boolean))].sort();
-  }, [courses, subjects]);
-
-  const semesters = ["Premier semestre", "Deuxième semestre"];
-
-  const filteredCourses = useMemo(() => {
-    return courses.filter(course => {
-      const text = normalize(search);
-
-      const matchesSearch =
-        !text ||
-        normalize(course.titre || course.title).includes(text) ||
-        normalize(course.matiere || course.subject).includes(text);
-
-      const matchesUniversity =
-        !filterUniversity ||
-        (course.universite || course.university) === filterUniversity;
-
-      const matchesLevel =
-        !filterLevel ||
-        (course.niveau || course.level) === filterLevel;
-
-      const matchesSemester =
-        !filterSemester ||
-        course.semestre === filterSemester;
-
-      return matchesSearch && matchesUniversity &&
-        matchesLevel && matchesSemester;
-    });
-  }, [courses, search, filterUniversity, filterLevel, filterSemester]);
-
-  const filteredExams = useMemo(() => {
-    return exams.filter(exam => {
-      const text = normalize(search);
-
-      return (
-        (!text ||
-          normalize(exam.titre).includes(text) ||
-          normalize(exam.matiere).includes(text)) &&
-        (!filterUniversity || exam.universite === filterUniversity) &&
-        (!filterLevel || exam.niveau === filterLevel) &&
-        (!filterSemester || exam.semestre === filterSemester)
-      );
-    });
-  }, [exams, search, filterUniversity, filterLevel, filterSemester]);
-
-  const groupedCourses = useMemo(() => {
-    return filteredCourses.reduce((groups, course) => {
-      const subject = course.matiere || course.subject || "Autres cours";
-
-      if (!groups[subject]) groups[subject] = [];
-      groups[subject].push(course);
-
-      return groups;
-    }, {});
-  }, [filteredCourses]);
-
-  /* AJOUTER UNE MATIÈRE */
 
   async function ajouterMatiere(e) {
     e.preventDefault();
 
     if (!isAdmin) return;
 
-    if (
-      !subjectForm.universite ||
-      !subjectForm.filiere ||
-      !subjectForm.niveau ||
-      !subjectForm.semestre ||
-      !subjectForm.nom
-    ) {
-      return alert("Complète tous les champs.");
+    if (!subjectForm.nom.trim()) {
+      return alert("Entre le nom de la matière.");
     }
 
     setBusy(true);
@@ -438,31 +270,24 @@ export default function HomePage() {
       });
 
       setSubjectForm({
-        universite: "",
-        filiere: "",
-        niveau: "",
-        semestre: "",
-        nom: ""
+        nom: "",
+        universite: "UCAD",
+        filiere: "Médecine",
+        niveau: "Deuxième année",
+        semestre: "Premier semestre"
       });
 
       setModal("");
       await chargerDonnees();
 
-      alert("Matière enregistrée avec succès.");
+      alert("Matière créée avec succès.");
     } catch (error) {
-      console.error("Erreur Firestore matière:", error);
-
-      alert(
-        `Enregistrement refusé : ${error.code || "erreur"} — ${
-          error.message || "Vérifie les règles Firestore."
-        }`
-      );
+      console.error(error);
+      alert("Impossible de créer la matière : " + error.message);
     } finally {
       setBusy(false);
     }
   }
-
-  /* AJOUTER UNE LEÇON AVEC UN PDF */
 
   async function ajouterLecon(e) {
     e.preventDefault();
@@ -470,29 +295,37 @@ export default function HomePage() {
     if (!isAdmin) return;
 
     const subject = subjects.find(
-      s => s.id === courseForm.matiereId
+      (s) => s.id === courseForm.matiereId
     );
 
     if (!subject) return alert("Sélectionne une matière.");
 
     if (!courseForm.titre.trim()) {
-      return alert("Ajoute le titre de la leçon.");
+      return alert("Entre le titre de la leçon.");
     }
 
     if (!lessonFile && !courseForm.url.trim()) {
-      return alert("Choisis un PDF depuis ton appareil ou ajoute un lien PDF.");
+      return alert("Choisis un PDF ou ajoute un lien.");
     }
 
-    if (lessonFile && lessonFile.type !== "application/pdf") {
-      return alert("Le fichier doit être au format PDF.");
+    if (
+      lessonFile &&
+      lessonFile.type !== "application/pdf" &&
+      !lessonFile.name.toLowerCase().endsWith(".pdf")
+    ) {
+      return alert("Le fichier doit être un PDF.");
     }
 
     setBusy(true);
+    setUploading(false);
+    setUploadProgress(0);
 
     try {
       let pdfUrl = courseForm.url.trim();
 
       if (lessonFile) {
+        setUploading(true);
+
         const safeName = lessonFile.name.replace(
           /[^a-zA-Z0-9._-]/g,
           "_"
@@ -503,16 +336,32 @@ export default function HomePage() {
           `cours/${user.uid}/${Date.now()}_${safeName}`
         );
 
-        const uploaded = await uploadBytes(
-          fileRef,
-          lessonFile,
-          { contentType: "application/pdf" }
-        );
+        const task = uploadBytesResumable(fileRef, lessonFile, {
+          contentType: "application/pdf"
+        });
 
-        pdfUrl = await getDownloadURL(uploaded.ref);
+        pdfUrl = await new Promise((resolve, reject) => {
+          task.on(
+            "state_changed",
+            (snapshot) => {
+              const percent = Math.round(
+                (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+              );
+              setUploadProgress(percent);
+            },
+            reject,
+            async () => {
+              try {
+                resolve(await getDownloadURL(task.snapshot.ref));
+              } catch (error) {
+                reject(error);
+              }
+            }
+          );
+        });
       }
 
-      const payload = {
+      await addDoc(collection(db, "cours"), {
         titre: courseForm.titre.trim(),
         matiere: subject.nom,
         matiereId: subject.id,
@@ -525,9 +374,7 @@ export default function HomePage() {
         pdfUrl,
         createdAt: serverTimestamp(),
         createdBy: user.uid
-      };
-
-      await addDoc(collection(db, "cours"), payload);
+      });
 
       setCourseForm({
         titre: "",
@@ -543,79 +390,124 @@ export default function HomePage() {
 
       alert("Leçon publiée avec succès.");
     } catch (error) {
-      console.error("Erreur publication leçon:", error);
-
+      console.error("Publication:", error);
       alert(
-        `Publication refusée : ${error.code || "erreur"} — ${
-          error.message || "Vérifie les règles Firebase et Firebase Storage."
-        }`
+        "Erreur de publication : " +
+        (error.message || "Vérifie Firebase Storage.")
       );
     } finally {
       setBusy(false);
+      setUploading(false);
     }
   }
-
-  /* AJOUTER UN EXAMEN */
 
   async function ajouterExamen(e) {
     e.preventDefault();
 
     if (!isAdmin) return;
 
-    if (!examForm.titre || !examForm.matiere || !examForm.url) {
-      return alert("Le titre, la matière et le lien du sujet sont obligatoires.");
-    }
+    const subject = subjects.find(
+      (s) => s.id === examForm.matiereId
+    );
 
-    if (!examForm.url.startsWith("https://")) {
-      return alert("Le lien du sujet doit commencer par https://");
-    }
+    if (!subject) return alert("Sélectionne une matière.");
 
-    if (
-      examForm.correctionUrl &&
-      !examForm.correctionUrl.startsWith("https://")
-    ) {
-      return alert("Le lien de correction doit commencer par https://");
+    if (!examForm.titre.trim()) {
+      return alert("Entre le titre de l'examen.");
     }
 
     setBusy(true);
 
     try {
+      let sujetUrl = examForm.sujetUrl.trim();
+      let correctionUrl = examForm.correctionUrl.trim();
+
+      if (examFile) {
+        const fileRef = ref(
+          storage,
+          `examens/${user.uid}/${Date.now()}_${examFile.name}`
+        );
+
+        const task = uploadBytesResumable(fileRef, examFile);
+        await new Promise((resolve, reject) => {
+          task.on(
+            "state_changed",
+            null,
+            reject,
+            async () => {
+              try {
+                sujetUrl = await getDownloadURL(task.snapshot.ref);
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            }
+          );
+        });
+      }
+
+      if (correctionFile) {
+        const fileRef = ref(
+          storage,
+          `corrections/${user.uid}/${Date.now()}_${correctionFile.name}`
+        );
+
+        const task = uploadBytesResumable(fileRef, correctionFile);
+
+        await new Promise((resolve, reject) => {
+          task.on(
+            "state_changed",
+            null,
+            reject,
+            async () => {
+              try {
+                correctionUrl = await getDownloadURL(task.snapshot.ref);
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            }
+          );
+        });
+      }
+
       await addDoc(collection(db, "examens"), {
-        ...examForm,
+        titre: examForm.titre.trim(),
+        matiere: subject.nom,
+        matiereId: subject.id,
+        universite: subject.universite,
+        filiere: subject.filiere,
+        niveau: subject.niveau,
+        semestre: subject.semestre,
+        annee: examForm.annee,
+        sujetUrl,
+        correctionUrl,
         createdAt: serverTimestamp(),
         createdBy: user.uid
       });
 
       setExamForm({
         titre: "",
-        universite: "",
-        filiere: "",
-        niveau: "",
-        semestre: "",
-        matiere: "",
-        annee: "",
-        url: "",
-        correctionUrl: ""
+        matiereId: "",
+        sujetUrl: "",
+        correctionUrl: "",
+        annee: ""
       });
 
+      setExamFile(null);
+      setCorrectionFile(null);
       setModal("");
+
       await chargerDonnees();
 
-      alert("Examen publié avec succès.");
+      alert("Examen ajouté avec succès.");
     } catch (error) {
-      console.error("Erreur enregistrement examen:", error);
-
-      alert(
-        `Enregistrement refusé : ${error.code || "erreur"} — ${
-          error.message || "Vérifie les règles Firebase."
-        }`
-      );
+      console.error(error);
+      alert("Erreur : " + error.message);
     } finally {
       setBusy(false);
     }
   }
-
-  /* SUPPRESSION */
 
   async function supprimerElement(collectionName, id) {
     if (!isAdmin) return;
@@ -626,28 +518,15 @@ export default function HomePage() {
       await deleteDoc(doc(db, collectionName, id));
       await chargerDonnees();
     } catch (error) {
-      console.error(error);
-      alert("Suppression impossible. Vérifie les règles Firebase.");
+      alert("Suppression impossible : " + error.message);
     }
   }
 
-  /* OUVRIR UN COURS */
-
-  function ouvrirCours(course) {
-    const url = getCourseUrl(course);
-
-    if (!url) return alert("Aucun document disponible.");
-
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-
-  /* ASSISTANT IA */
-
-  async function lancerIA(e) {
-    e.preventDefault();
+  async function lancerIA(e, actionOverride = aiAction) {
+    e?.preventDefault();
 
     if (!aiFile) {
-      return alert("Sélectionne un fichier PDF.");
+      return alert("Sélectionne d'abord un fichier PDF.");
     }
 
     setBusy(true);
@@ -657,10 +536,10 @@ export default function HomePage() {
       const formData = new FormData();
 
       formData.append("fichier", aiFile);
-      formData.append("action", aiAction);
+      formData.append("action", actionOverride);
 
-      if (aiQuestion) {
-        formData.append("question", aiQuestion);
+      if (aiQuestion.trim()) {
+        formData.append("question", aiQuestion.trim());
       }
 
       const response = await fetch("/api/ia", {
@@ -671,7 +550,7 @@ export default function HomePage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Erreur pendant l'analyse.");
+        throw new Error(data.error || "Erreur du service IA.");
       }
 
       const result =
@@ -680,30 +559,24 @@ export default function HomePage() {
         data.reponse ||
         data.text ||
         data.contenu ||
-        JSON.stringify(data);
+        "";
 
       setAiResult(result);
 
-      if (user) {
-        await addDoc(
-          collection(db, "users", user.uid, "resultats"),
-          {
-            titre: aiFile.name,
-            type: aiAction,
-            resultat: result,
-            createdAt: serverTimestamp()
-          }
-        );
-
-        await chargerDonnees();
-      }
-    } catch (error) {
-      console.error("Erreur de génération:", error);
-
-      alert(
-        error.message ||
-        "Une erreur est survenue pendant la préparation de ton contenu."
+      await addDoc(
+        collection(db, "users", user.uid, "resultats"),
+        {
+          type: actionOverride,
+          fichier: aiFile.name,
+          resultat: result,
+          createdAt: serverTimestamp()
+        }
       );
+
+      await chargerDonnees();
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Une erreur est survenue.");
     } finally {
       setBusy(false);
     }
@@ -714,980 +587,483 @@ export default function HomePage() {
 
     if (!aiQuestion.trim()) return;
 
-    setAiAction("chat");
-
-    if (!aiFile) {
-      return alert("Sélectionne d'abord un PDF pour poser une question sur ton cours.");
-    }
-
-    await lancerIA(e);
+    await lancerIA(e, "chat");
   }
-
-  /* DÉCONNEXION */
 
   async function deconnexion() {
     await signOut(auth);
-    window.location.href = "/connexion";
+    router.replace("/connexion");
   }
 
-  /* NAVIGATION */
+  const filteredCourses = useMemo(() => {
+    return courses.filter((course) => {
+      const matchesSearch =
+        normalize(course.titre).includes(normalize(search)) ||
+        normalize(course.matiere).includes(normalize(search));
 
-  function navigate(id) {
-    setActive(id);
-    setMobileMenu(false);
-    setSelectedSubject(null);
-    setSearch("");
-  }
+      const matchesSubject =
+        !filterSubject || course.matiereId === filterSubject;
 
-  /* CHARGEMENT */
+      return matchesSearch && matchesSubject;
+    });
+  }, [courses, search, filterSubject]);
 
-  if (loading) {
-    return (
-      <div className="loading-screen">
-        <div className="brand-mark">DN</div>
-        <LoaderCircle className="spin" size={28} />
-        <p>Préparation de ton espace d'études...</p>
-      </div>
+  const filteredExams = useMemo(() => {
+    return exams.filter((exam) =>
+      normalize(exam.titre + " " + exam.matiere).includes(normalize(search))
     );
-  }
+  }, [exams, search]);
 
   const displayName =
-    profile.prenom ||
-    profile.firstName ||
+    profile?.prenom ||
+    profile?.nom ||
     user?.displayName ||
     user?.email?.split("@")[0] ||
     "Étudiant";
-    /* =====================================================
-     TABLEAU DE BORD
-  ===================================================== */
 
   function Dashboard() {
     return (
-      <div className="page-content">
-        <SectionTitle
-          eyebrow="ESPACE ÉTUDIANT"
-          title={`Bonjour, ${displayName}`}
-          description="Bienvenue sur ton espace de travail médical."
-        />
-
-        <div className="welcome-card">
+      <>
+        <div className="welcome">
           <div>
-            <span className="welcome-label">DN MED STUDY</span>
-            <h2>Progresse à ton rythme.</h2>
-            <p>
-              Retrouve tes cours, prépare tes examens et améliore
-              tes connaissances médicales.
-            </p>
-            <button onClick={() => navigate("courses")}>
-              Explorer les cours <ChevronRight size={18} />
-            </button>
+            <p className="eyebrow">ESPACE ÉTUDIANT</p>
+            <h1>Bienvenue, {displayName}</h1>
+            <p>Tout ton environnement de travail médical au même endroit.</p>
           </div>
           <div className="welcome-icon">
-            <Stethoscope size={76} strokeWidth={1.2} />
+            <Stethoscope size={42} />
           </div>
         </div>
 
         <div className="stats-grid">
-          <div className="stat-card">
-            <IconTile icon={BookOpen} color="#2563EB" background="#EAF1FF" />
-            <div>
-              <strong>{courses.length}</strong>
-              <span>Cours disponibles</span>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <IconTile icon={Layers} color="#7C3AED" background="#F1EAFE" />
-            <div>
-              <strong>{subjects.length}</strong>
-              <span>Matières</span>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <IconTile icon={ClipboardList} color="#0891B2" background="#E4F7FB" />
-            <div>
-              <strong>{exams.length}</strong>
-              <span>Examens disponibles</span>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <IconTile icon={History} color="#059669" background="#E5F8EF" />
-            <div>
-              <strong>{history.length}</strong>
-              <span>Activités réalisées</span>
-            </div>
-          </div>
+          <Stat icon={BookOpen} label="Cours disponibles" value={courses.length} />
+          <Stat icon={Layers} label="Matières" value={subjects.length} />
+          <Stat icon={ClipboardList} label="Examens" value={exams.length} />
+          <Stat icon={History} label="Travaux IA" value={history.length} />
         </div>
 
-        <div className="content-section">
-          <div className="section-heading">
-            <div>
-              <h2>Outils de révision</h2>
-              <p>Travaille efficacement tes cours.</p>
-            </div>
-            <button className="text-button" onClick={() => navigate("ai")}>
-              Voir tout <ChevronRight size={17} />
-            </button>
-          </div>
+        <SectionTitle title="Accès rapide" />
 
-          <div className="tools-grid">
-            {TOOLS.map(tool => (
-              <button
-                className="tool-card"
-                key={tool.id}
-                onClick={() => {
-                  setAiAction(tool.id);
-                  navigate("ai");
-                }}
-              >
-                <IconTile
-                  icon={tool.icon}
-                  color={tool.color}
-                  background={tool.background}
-                />
-                <h3>{tool.title}</h3>
-                <p>{tool.description}</p>
-                <span className="tool-arrow">
-                  Commencer <ChevronRight size={16} />
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="content-section">
-          <div className="section-heading">
-            <div>
-              <h2>Activités récentes</h2>
-              <p>Les dernières opérations de ton espace.</p>
-            </div>
-          </div>
-
-          {history.length === 0 ? (
-            <EmptyState
-              icon={History}
-              title="Aucune activité pour le moment"
-              description="Tes prochaines activités de révision apparaîtront ici."
-            />
-          ) : (
-            <div className="history-list">
-              {history.slice(0, 5).map(item => (
-                <div className="history-item" key={item.id}>
-                  <IconTile
-                    icon={FileText}
-                    color="#2563EB"
-                    background="#EAF1FF"
-                    size={21}
-                  />
-                  <div className="history-info">
-                    <strong>{item.titre || "Activité de révision"}</strong>
-                    <span>{item.type || "Révision"}</span>
-                  </div>
-                  <span className="history-date">
-                    {formatDate(item.createdAt)}
-                  </span>
-                  <button
-                    className="icon-button"
-                    onClick={() => ouvrirResultat(item)}
-                    title="Voir le résultat"
-                  >
-                    <Eye size={18} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  /* =====================================================
-     BIBLIOTHÈQUE DES COURS
-  ===================================================== */
-
-  function CoursesPage() {
-    const availableSubjects = subjects.filter(subject => {
-      return (
-        (!filterUniversity || subject.universite === filterUniversity) &&
-        (!filterLevel || subject.niveau === filterLevel) &&
-        (!filterSemester || subject.semestre === filterSemester)
-      );
-    });
-
-    const visibleCourses = selectedSubject
-      ? filteredCourses.filter(
-          course =>
-            course.matiereId === selectedSubject.id ||
-            (course.matiere || course.subject) === selectedSubject.nom
-        )
-      : filteredCourses;
-
-    return (
-      <div className="page-content">
-        <SectionTitle
-          eyebrow="BIBLIOTHÈQUE UNIVERSITAIRE"
-          title="Mes cours"
-          description="Retrouve les supports de cours organisés par matière."
-          action={
-            isAdmin && (
-              <button
-                className="primary-button"
-                onClick={() => setModal("subject")}
-              >
-                <Plus size={18} /> Nouvelle matière
-              </button>
-            )
-          }
-        />
-
-        <div className="filter-panel">
-          <div className="search-box">
-            <Search size={19} />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher un cours ou une matière..."
-            />
-          </div>
-
-          <div className="filters-row">
-            <select
-              value={filterUniversity}
-              onChange={e => setFilterUniversity(e.target.value)}
-            >
-              <option value="">Toutes les universités</option>
-              {universities.map(item => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-
-            <select
-              value={filterLevel}
-              onChange={e => setFilterLevel(e.target.value)}
-            >
-              <option value="">Tous les niveaux</option>
-              {levels.map(item => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-
-            <select
-              value={filterSemester}
-              onChange={e => setFilterSemester(e.target.value)}
-            >
-              <option value="">Tous les semestres</option>
-              {semesters.map(item => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {selectedSubject && (
-          <button
-            className="back-button"
-            onClick={() => setSelectedSubject(null)}
-          >
-            <ArrowLeft size={17} /> Retour aux matières
-          </button>
-        )}
-
-        {!selectedSubject ? (
-          <>
-            <div className="section-heading">
-              <div>
-                <h2>Les matières</h2>
-                <p>{availableSubjects.length} matière(s) disponible(s)</p>
-              </div>
-            </div>
-
-            {availableSubjects.length === 0 ? (
-              <EmptyState
-                icon={BookOpen}
-                title="Aucune matière disponible"
-                description="Les matières publiées apparaîtront ici."
-              />
-            ) : (
-              <div className="subjects-grid">
-                {availableSubjects.map(subject => {
-                  const count = courses.filter(
-                    c =>
-                      c.matiereId === subject.id ||
-                      (c.matiere || c.subject) === subject.nom
-                  ).length;
-
-                  return (
-                    <div className="subject-card" key={subject.id}>
-                      <button
-                        className="subject-main"
-                        onClick={() => setSelectedSubject(subject)}
-                      >
-                        <IconTile
-                          icon={BookMarked}
-                          color="#2563EB"
-                          background="#EAF1FF"
-                        />
-                        <h3>{subject.nom}</h3>
-                        <p>{subject.filiere} · {subject.niveau}</p>
-                        <span>{subject.semestre}</span>
-                        <div className="subject-footer">
-                          <span>{count} leçon(s)</span>
-                          <ChevronRight size={19} />
-                        </div>
-                      </button>
-
-                      {isAdmin && (
-                        <button
-                          className="delete-subject"
-                          onClick={() => supprimerElement("matieres", subject.id)}
-                          title="Supprimer la matière"
-                        >
-                          <Trash2 size={17} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="content-section">
-            <div className="section-heading">
-              <div>
-                <h2>{selectedSubject.nom}</h2>
-                <p>
-                  {selectedSubject.universite} · {selectedSubject.niveau} ·{" "}
-                  {selectedSubject.semestre}
-                </p>
-              </div>
-
-              {isAdmin && (
-                <button
-                  className="primary-button"
-                  onClick={() => {
-                    setCourseForm({
-                      titre: "",
-                      matiereId: selectedSubject.id,
-                      url: "",
-                      description: ""
-                    });
-                    setModal("course");
-                  }}
-                >
-                  <Plus size={18} /> Ajouter une leçon
-                </button>
-              )}
-            </div>
-
-            {visibleCourses.length === 0 ? (
-              <EmptyState
-                icon={FileText}
-                title="Aucune leçon publiée"
-                description="Les supports de cette matière apparaîtront ici."
-              />
-            ) : (
-              <div className="lesson-list">
-                {visibleCourses.map(course => (
-                  <div className="lesson-card" key={course.id}>
-                    <IconTile
-                      icon={FileText}
-                      color="#DC2626"
-                      background="#FEECEC"
-                    />
-                    <div className="lesson-info">
-                      <h3>{course.titre || course.title}</h3>
-                      <p>{course.description || selectedSubject.nom}</p>
-                    </div>
-                    <button
-                      className="outline-button"
-                      onClick={() => ouvrirCours(course)}
-                    >
-                      <ExternalLink size={16} /> Ouvrir le PDF
-                    </button>
-
-                    {isAdmin && (
-                      <button
-                        className="icon-button danger"
-                        onClick={() => supprimerElement("cours", course.id)}
-                        title="Supprimer la leçon"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  /* =====================================================
-     EXAMENS
-  ===================================================== */
-
-  function ExamsPage() {
-    return (
-      <div className="page-content">
-        <SectionTitle
-          eyebrow="ENTRAÎNEMENT"
-          title="Examens"
-          description="Prépare-toi avec les anciens sujets et leurs corrections."
-          action={
-            isAdmin && (
-              <button
-                className="primary-button"
-                onClick={() => setModal("exam")}
-              >
-                <Plus size={18} /> Ajouter un examen
-              </button>
-            )
-          }
-        />
-
-        <div className="filter-panel">
-          <div className="search-box">
-            <Search size={19} />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher un examen..."
-            />
-          </div>
-
-          <div className="filters-row">
-            <select
-              value={filterUniversity}
-              onChange={e => setFilterUniversity(e.target.value)}
-            >
-              <option value="">Toutes les universités</option>
-              {universities.map(item => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-
-            <select
-              value={filterLevel}
-              onChange={e => setFilterLevel(e.target.value)}
-            >
-              <option value="">Tous les niveaux</option>
-              {levels.map(item => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-
-            <select
-              value={filterSemester}
-              onChange={e => setFilterSemester(e.target.value)}
-            >
-              <option value="">Tous les semestres</option>
-              {semesters.map(item => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {filteredExams.length === 0 ? (
-          <EmptyState
-            icon={ClipboardList}
-            title="Aucun examen disponible"
-            description="Les sujets publiés apparaîtront ici."
-          />
-        ) : (
-          <div className="exams-grid">
-            {filteredExams.map(exam => (
-              <div className="exam-card" key={exam.id}>
-                <div className="exam-top">
-                  <IconTile
-                    icon={ClipboardList}
-                    color="#7C3AED"
-                    background="#F1EAFE"
-                  />
-                  <span className="exam-year">
-                    {exam.annee || "Année non précisée"}
-                  </span>
-                </div>
-
-                <h3>{exam.titre}</h3>
-                <p>{exam.matiere}</p>
-
-                <div className="exam-details">
-                  <span>{exam.niveau}</span>
-                  <span>{exam.semestre}</span>
-                </div>
-
-                <div className="exam-actions">
-                  <a
-                    href={exam.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="primary-button"
-                  >
-                    <FileText size={16} /> Ouvrir le sujet
-                  </a>
-
-                  {exam.correctionUrl ? (
-                    <a
-                      href={exam.correctionUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="outline-button"
-                    >
-                      <FileCheck size={16} /> Voir la correction
-                    </a>
-                  ) : (
-                    <span className="no-correction">
-                      Correction non disponible
-                    </span>
-                  )}
-                </div>
-
-                {isAdmin && (
-                  <button
-                    className="delete-exam"
-                    onClick={() => supprimerElement("examens", exam.id)}
-                  >
-                    <Trash2 size={17} /> Supprimer
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-      }
-  /* =====================================================
-     RÉSULTATS IA ET HISTORIQUE
-  ===================================================== */
-
-  function ouvrirResultat(item) {
-    setAiResult(item.resultat || item.contenu || "");
-    setActive("ai");
-  }
-
-  async function copierResultat() {
-    try {
-      await navigator.clipboard.writeText(aiResult);
-      alert("Résultat copié.");
-    } catch {
-      alert("Impossible de copier le résultat.");
-    }
-  }
-
-  function RevisionPage() {
-    return (
-      <div className="page-content">
-        <SectionTitle
-          eyebrow="APPRENTISSAGE"
-          title="Révision"
-          description="Retrouve tes outils pour consolider tes connaissances."
-        />
-
-        <div className="tools-grid">
-          {TOOLS.map(tool => (
+        <div className="quick-grid">
+          {[
+            ["courses", "Bibliothèque des cours", BookOpen],
+            ["exams", "Examens et corrections", ClipboardList],
+            ["ai", "Assistant intelligent", Sparkles],
+            ["revision", "Mes révisions", Brain]
+          ].map(([id, label, Icon]) => (
             <button
-              className="tool-card"
-              key={tool.id}
-              onClick={() => {
-                setAiAction(tool.id);
-                navigate("ai");
-              }}
+              className="quick-card"
+              key={id}
+              onClick={() => setActive(id)}
             >
-              <IconTile
-                icon={tool.icon}
-                color={tool.color}
-                background={tool.background}
-              />
-              <h3>{tool.title}</h3>
-              <p>{tool.description}</p>
-              <span className="tool-arrow">
-                Commencer <ChevronRight size={16} />
-              </span>
+              <Icon size={24} />
+              <span>{label}</span>
+              <ChevronRight size={18} />
             </button>
           ))}
         </div>
 
-        <div className="content-section">
-          <div className="section-heading">
-            <div>
-              <h2>Historique des révisions</h2>
-              <p>Consulte tes derniers résultats.</p>
+        <SectionTitle title="Derniers cours ajoutés" />
+
+        <div className="list-card">
+          {courses.slice(0, 5).map((course) => (
+            <div className="list-row" key={course.id}>
+              <FileText size={20} />
+              <div>
+                <strong>{course.titre}</strong>
+                <small>{course.matiere}</small>
+              </div>
+              <a href={course.pdfUrl || course.url} target="_blank" rel="noreferrer">
+                <ExternalLink size={18} />
+              </a>
             </div>
-          </div>
+          ))}
 
-          {history.length === 0 ? (
-            <EmptyState
-              icon={History}
-              title="Aucun résultat enregistré"
-              description="Tes résultats seront conservés ici."
-            />
-          ) : (
-            <div className="history-list">
-              {history.map(item => (
-                <div className="history-item" key={item.id}>
-                  <IconTile
-                    icon={FileText}
-                    color="#2563EB"
-                    background="#EAF1FF"
-                    size={21}
-                  />
-
-                  <div className="history-info">
-                    <strong>{item.titre || "Révision"}</strong>
-                    <span>{item.type || "Activité"}</span>
-                  </div>
-
-                  <span className="history-date">
-                    {formatDate(item.createdAt)}
-                  </span>
-
-                  <button
-                    className="outline-button"
-                    onClick={() => ouvrirResultat(item)}
-                  >
-                    Consulter
-                  </button>
-                </div>
-              ))}
-            </div>
+          {courses.length === 0 && (
+            <EmptyState text="Aucun cours disponible pour le moment." />
           )}
         </div>
+      </>
+    );
+  }
+
+  function SectionTitle({ title, action, onAction }) {
+    return (
+      <div className="section-title">
+        <h2>{title}</h2>
+        {action && (
+          <button onClick={onAction}>{action}</button>
+        )}
       </div>
     );
   }
 
-  /* =====================================================
-     ASSISTANT IA
-  ===================================================== */
-
-  function AIPage() {
-    const actionLabels = {
-      resume: "Synthèse de ton cours...",
-      qcm: "Préparation de tes QCM...",
-      flashcards: "Création de tes flashcards...",
-      chat: "Recherche de la réponse..."
-    };
-
+  function Stat({ icon: Icon, label, value }) {
     return (
-      <div className="page-content">
+      <div className="stat-card">
+        <div className="stat-icon"><Icon size={22} /></div>
+        <strong>{value}</strong>
+        <span>{label}</span>
+      </div>
+    );
+  }
+
+  function CoursesPage() {
+    return (
+      <>
         <SectionTitle
-          eyebrow="ASSISTANT INTELLIGENT"
-          title="Assistant IA"
-          description="Travaille tes documents médicaux et prépare tes révisions."
+          title="Bibliothèque des cours"
+          action={isAdmin ? "Ajouter un cours" : null}
+          onAction={() => setModal("course")}
         />
 
-        <div className="ai-container">
-          <div className="ai-intro">
-            <div className="ai-logo">
-              <Sparkles size={30} />
+        <div className="filters">
+          <div className="search-box">
+            <Search size={18} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un cours..."
+            />
+          </div>
+
+          <select
+            value={filterSubject}
+            onChange={(e) => setFilterSubject(e.target.value)}
+          >
+            <option value="">Toutes les matières</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>{s.nom}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="course-grid">
+          {filteredCourses.map((course) => (
+            <article className="course-card" key={course.id}>
+              <div className="course-icon"><FileText size={26} /></div>
+              <small>{course.matiere}</small>
+              <h3>{course.titre}</h3>
+              <p>{course.description || "Document de cours disponible."}</p>
+              <a
+                href={course.pdfUrl || course.url}
+                target="_blank"
+                rel="noreferrer"
+                className="primary-button"
+              >
+                <Eye size={17} /> Ouvrir le cours
+              </a>
+
+              {isAdmin && (
+                <button
+                  className="delete-button"
+                  onClick={() => supprimerElement("cours", course.id)}
+                >
+                  <Trash2 size={16} /> Supprimer
+                </button>
+              )}
+            </article>
+          ))}
+
+          {filteredCourses.length === 0 && (
+            <EmptyState text="Aucun cours trouvé." />
+          )}
+        </div>
+      </>
+    );
+  }
+
+  function ExamsPage() {
+    return (
+      <>
+        <SectionTitle
+          title="Examens"
+          action={isAdmin ? "Ajouter un examen" : null}
+          onAction={() => setModal("exam")}
+        />
+
+        <div className="search-box">
+          <Search size={18} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un examen..."
+          />
+        </div>
+
+        <div className="list-card">
+          {filteredExams.map((exam) => (
+            <div className="exam-row" key={exam.id}>
+              <div className="course-icon"><ClipboardList size={24} /></div>
+
+              <div className="exam-info">
+                <strong>{exam.titre}</strong>
+                <span>{exam.matiere} · {exam.annee || "Année non précisée"}</span>
+              </div>
+
+              {exam.sujetUrl && (
+                <a
+                  href={exam.sujetUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="small-button"
+                >
+                  Sujet
+                </a>
+              )}
+
+              {exam.correctionUrl ? (
+                <a
+                  href={exam.correctionUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="small-button secondary"
+                >
+                  Correction
+                </a>
+              ) : (
+                <span className="unavailable">Correction non disponible</span>
+              )}
+
+              {isAdmin && (
+                <button
+                  className="icon-button danger"
+                  onClick={() => supprimerElement("examens", exam.id)}
+                >
+                  <Trash2 size={17} />
+                </button>
+              )}
             </div>
+          ))}
+
+          {filteredExams.length === 0 && (
+            <EmptyState text="Aucun examen disponible." />
+          )}
+        </div>
+      </>
+    );
+  }
+
+  function RevisionPage() {
+    return (
+      <>
+        <SectionTitle title="Mes révisions" />
+
+        <div className="stats-grid">
+          <Stat icon={History} label="Résultats enregistrés" value={history.length} />
+          <Stat icon={BookMarked} label="Documents utilisés" value={new Set(history.map(h => h.fichier)).size} />
+        </div>
+
+        <div className="list-card">
+          {history.map((item) => (
+            <div className="list-row" key={item.id}>
+              <Brain size={21} />
+              <div>
+                <strong>{item.fichier || "Document"}</strong>
+                <small>{item.type} · {formatDate(item.createdAt)}</small>
+              </div>
+              <button onClick={() => setAiResult(item.resultat || "")}>
+                <Eye size={18} />
+              </button>
+            </div>
+          ))}
+
+          {history.length === 0 && (
+            <EmptyState text="Ton historique de révision apparaîtra ici." />
+          )}
+        </div>
+
+        {aiResult && (
+          <div className="result-card">
+            <button className="close-result" onClick={() => setAiResult("")}>
+              <X size={18} />
+            </button>
+            <h3>Résultat</h3>
+            <pre>{aiResult}</pre>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  function AIPage() {
+    return (
+      <>
+        <SectionTitle title="Assistant intelligent" />
+
+        <div className="ai-card">
+          <div className="ai-heading">
+            <Sparkles size={30} />
             <div>
-              <h2>Ton assistant de révision</h2>
-              <p>
-                Importe un cours au format PDF et choisis ce que tu souhaites
-                préparer.
-              </p>
+              <h2>Travaille tes cours plus efficacement</h2>
+              <p>Importe un PDF et choisis le traitement souhaité.</p>
             </div>
           </div>
 
-          <form onSubmit={lancerIA}>
-            <label className="upload-area">
+          <form onSubmit={(e) => lancerIA(e)}>
+            <label className="upload-zone">
+              <Upload size={30} />
+              <strong>{aiFile ? aiFile.name : "Sélectionner un PDF"}</strong>
+              <span>Appuie ici pour choisir un document</span>
               <input
                 type="file"
                 accept="application/pdf,.pdf"
-                onChange={e => setAiFile(e.target.files?.[0] || null)}
-                hidden
+                onChange={(e) => setAiFile(e.target.files?.[0] || null)}
               />
-
-              <Upload size={30} />
-              <strong>
-                {aiFile ? aiFile.name : "Importer un document PDF"}
-              </strong>
-              <span>
-                {aiFile
-                  ? "Document sélectionné"
-                  : "Clique ici pour choisir un fichier depuis ton appareil"}
-              </span>
             </label>
 
             <div className="ai-actions">
-              {TOOLS.map(tool => (
+              {[
+                ["resume", "Résumé"],
+                ["qcm", "QCM"],
+                ["flashcards", "Flashcards"]
+              ].map(([value, label]) => (
                 <button
                   type="button"
-                  key={tool.id}
-                  className={`ai-action ${
-                    aiAction === tool.id ? "selected" : ""
-                  }`}
-                  onClick={() => setAiAction(tool.id)}
+                  key={value}
+                  className={aiAction === value ? "active-chip" : "chip"}
+                  onClick={() => setAiAction(value)}
                 >
-                  <tool.icon size={19} />
-                  {tool.title}
+                  {label}
                 </button>
               ))}
             </div>
 
-            <label className="field">
-              <span>Question ou consigne supplémentaire (facultatif)</span>
-              <textarea
-                value={aiQuestion}
-                onChange={e => setAiQuestion(e.target.value)}
-                placeholder="Exemple : Explique les notions importantes de ce cours..."
-                rows={4}
-              />
-            </label>
-
-            <button
-              className="primary-button ai-submit"
-              type="submit"
-              disabled={busy}
-            >
-              {busy ? (
-                <>
-                  <LoaderCircle className="spin" size={19} />
-                  {actionLabels[aiAction] || "Préparation en cours..."}
-                </>
-              ) : (
-                <>
-                  <Sparkles size={19} />
-                  Lancer la préparation
-                </>
-              )}
+            <button className="primary-button full" disabled={busy}>
+              {busy ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}
+              {busy ? "Traitement en cours..." : "Lancer le traitement"}
             </button>
           </form>
 
-          {aiResult && (
-            <div className="ai-result">
-              <div className="result-header">
-                <div>
-                  <span className="eyebrow">TON RÉSULTAT</span>
-                  <h2>Contenu généré</h2>
-                </div>
-
-                <button
-                  className="outline-button"
-                  onClick={copierResultat}
-                >
-                  <Bookmark size={17} /> Copier
-                </button>
-              </div>
-
-              <div className="result-content">
-                {aiResult}
-              </div>
-            </div>
-          )}
+          <form onSubmit={poserQuestion} className="question-form">
+            <Field
+              label="Poser une question sur le document"
+              value={aiQuestion}
+              onChange={setAiQuestion}
+              placeholder="Écris ta question..."
+            />
+            <button className="primary-button" disabled={busy || !aiFile}>
+              <Send size={17} /> Envoyer
+            </button>
+          </form>
         </div>
-      </div>
+
+        {aiResult && (
+          <div className="result-card">
+            <h3>Résultat</h3>
+            <pre>{aiResult}</pre>
+            <button
+              className="small-button"
+              onClick={() => navigator.clipboard.writeText(aiResult)}
+            >
+              Copier le résultat
+            </button>
+          </div>
+        )}
+      </>
     );
   }
-
-  /* =====================================================
-     ADMINISTRATION
-  ===================================================== */
 
   function AdminPage() {
     if (!isAdmin) {
       return (
-        <div className="page-content">
-          <EmptyState
-            icon={ShieldCheck}
-            title="Accès réservé"
-            description="Cette section est réservée à l'administrateur."
-          />
-        </div>
+        <EmptyState
+          icon={ShieldCheck}
+          text="Cette section est réservée à l'administration."
+        />
       );
     }
 
     return (
-      <div className="page-content">
-        <SectionTitle
-          eyebrow="GESTION DE LA PLATEFORME"
-          title="Administration"
-          description="Gère les matières, les supports de cours et les examens."
-        />
+      <>
+        <SectionTitle title="Administration" />
 
         <div className="admin-grid">
-          <button
-            className="admin-card"
-            onClick={() => setModal("subject")}
-          >
-            <IconTile
-              icon={BookOpen}
-              color="#2563EB"
-              background="#EAF1FF"
-            />
-            <h3>Créer une matière</h3>
-            <p>Définir une matière, son niveau et son semestre.</p>
-            <ChevronRight size={19} />
+          <button onClick={() => setModal("subject")}>
+            <Plus size={24} />
+            <strong>Créer une matière</strong>
+            <span>Ajouter une nouvelle matière</span>
           </button>
 
-          <button
-            className="admin-card"
-            onClick={() => {
-              setCourseForm({
-                titre: "",
-                matiereId: "",
-                url: "",
-                description: ""
-              });
-              setLessonFile(null);
-              setModal("course");
-            }}
-          >
-            <IconTile
-              icon={FilePlus2}
-              color="#0891B2"
-              background="#E4F7FB"
-            />
-            <h3>Publier un cours</h3>
-            <p>Ajouter une leçon et son document PDF.</p>
-            <ChevronRight size={19} />
+          <button onClick={() => setModal("course")}>
+            <FilePlus2 size={24} />
+            <strong>Publier un cours</strong>
+            <span>Ajouter un document PDF</span>
           </button>
 
-          <button
-            className="admin-card"
-            onClick={() => setModal("exam")}
-          >
-            <IconTile
-              icon={ClipboardList}
-              color="#7C3AED"
-              background="#F1EAFE"
-            />
-            <h3>Ajouter un examen</h3>
-            <p>Publier un sujet et sa correction facultative.</p>
-            <ChevronRight size={19} />
+          <button onClick={() => setModal("exam")}>
+            <ClipboardList size={24} />
+            <strong>Ajouter un examen</strong>
+            <span>Ajouter un sujet et sa correction</span>
           </button>
         </div>
 
-        <div className="content-section">
-          <div className="section-heading">
-            <div>
-              <h2>Contenu publié</h2>
-              <p>Vue d'ensemble de la bibliothèque.</p>
-            </div>
-            <button
-              className="outline-button"
-              onClick={chargerDonnees}
-              disabled={busy}
-            >
-              <RefreshCw size={17} /> Actualiser
-            </button>
-          </div>
+        <SectionTitle title="Matières enregistrées" />
 
-          <div className="stats-grid">
-            <div className="stat-card">
-              <strong>{subjects.length}</strong>
-              <span>Matières</span>
+        <div className="list-card">
+          {subjects.map((subject) => (
+            <div className="list-row" key={subject.id}>
+              <BookOpen size={20} />
+              <div>
+                <strong>{subject.nom}</strong>
+                <small>
+                  {subject.filiere} · {subject.niveau} · {subject.semestre}
+                </small>
+              </div>
+              <button
+                className="icon-button danger"
+                onClick={() => supprimerElement("matieres", subject.id)}
+              >
+                <Trash2 size={17} />
+              </button>
             </div>
-            <div className="stat-card">
-              <strong>{courses.length}</strong>
-              <span>Leçons</span>
-            </div>
-            <div className="stat-card">
-              <strong>{exams.length}</strong>
-              <span>Examens</span>
-            </div>
-          </div>
+          ))}
         </div>
-      </div>
+      </>
     );
   }
-
-  /* =====================================================
-     PARAMÈTRES
-  ===================================================== */
 
   function SettingsPage() {
     return (
-      <div className="page-content">
-        <SectionTitle
-          eyebrow="PERSONNALISATION"
-          title="Paramètres"
-          description="Configure ton espace de travail."
-        />
+      <>
+        <SectionTitle title="Paramètres" />
 
         <div className="settings-card">
-          <div className="settings-row">
-            <IconTile
-              icon={UserRound}
-              color="#2563EB"
-              background="#EAF1FF"
-            />
-            <div>
-              <strong>Compte étudiant</strong>
-              <p>{user?.email}</p>
-            </div>
-          </div>
-
-          <div className="settings-row">
-            <IconTile
-              icon={dark ? Eye : Settings}
-              color="#7C3AED"
-              background="#F1EAFE"
-            />
-            <div>
-              <strong>Apparence</strong>
-              <p>Choisis le thème de ton application.</p>
-            </div>
-            <button
-              className="outline-button"
-              onClick={() => setDark(!dark)}
-            >
-              {dark ? "Mode clair" : "Mode sombre"}
-            </button>
-          </div>
-
-          <div className="settings-row">
-            <IconTile
-              icon={LogOut}
-              color="#DC2626"
-              background="#FEECEC"
-            />
-            <div>
-              <strong>Déconnexion</strong>
-              <p>Quitter ton compte.</p>
-            </div>
-            <button
-              className="outline-button danger"
-              onClick={deconnexion}
-            >
-              Se déconnecter
-            </button>
+          <UserRound size={24} />
+          <div>
+            <strong>{displayName}</strong>
+            <p>{user?.email}</p>
           </div>
         </div>
-      </div>
+
+        <button
+          className="settings-action"
+          onClick={() => setDark(!dark)}
+        >
+          <Settings size={20} />
+          <span>Mode sombre</span>
+          <strong>{dark ? "Activé" : "Désactivé"}</strong>
+        </button>
+
+        <button className="settings-action logout" onClick={deconnexion}>
+          <LogOut size={20} />
+          <span>Se déconnecter</span>
+        </button>
+      </>
     );
   }
 
-  /* =====================================================
-     MODALES
-  ===================================================== */
-
-  function Modal({ title, children }) {
+  function Modal({ title, children, onClose }) {
     return (
-      <div className="modal-overlay" onClick={() => setModal("")}>
+      <div className="modal-overlay" onMouseDown={onClose}>
         <div
           className="modal-card"
-          onClick={e => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="modal-header">
             <h2>{title}</h2>
-            <button
-              className="icon-button"
-              onClick={() => setModal("")}
-            >
-              <X size={21} />
-            </button>
+            <button onClick={onClose}><X size={22} /></button>
           </div>
-
           {children}
         </div>
       </div>
@@ -1695,88 +1071,91 @@ export default function HomePage() {
   }
 
   function SubjectModal() {
-    return (
-      <Modal title="Créer une matière">
-        <form onSubmit={ajouterMatiere} className="modal-form">
+    return Modal({
+      title: "Créer une matière",
+      onClose: () => setModal(""),
+      children: (
+        <form onSubmit={ajouterMatiere}>
+          <Field
+            label="Nom de la matière"
+            value={subjectForm.nom}
+            onChange={(v) => setSubjectForm({ ...subjectForm, nom: v })}
+            required
+          />
+
           <Field
             label="Université"
             value={subjectForm.universite}
-            onChange={v => setSubjectForm({ ...subjectForm, universite: v })}
-            placeholder="Ex : UCAD"
-            required
+            onChange={(v) => setSubjectForm({ ...subjectForm, universite: v })}
           />
 
           <Field
             label="Filière"
             value={subjectForm.filiere}
-            onChange={v => setSubjectForm({ ...subjectForm, filiere: v })}
-            placeholder="Ex : Médecine"
-            required
+            onChange={(v) => setSubjectForm({ ...subjectForm, filiere: v })}
           />
 
-          <Field
-            label="Niveau académique"
+          <SelectField
+            label="Année d'étude"
             value={subjectForm.niveau}
-            onChange={v => setSubjectForm({ ...subjectForm, niveau: v })}
-            placeholder="Ex : Deuxième année"
-            required
+            onChange={(v) => setSubjectForm({ ...subjectForm, niveau: v })}
+            options={[
+              "Première année",
+              "Deuxième année",
+              "Troisième année",
+              "Quatrième année",
+              "Cinquième année",
+              "Sixième année"
+            ]}
           />
 
           <SelectField
             label="Semestre"
             value={subjectForm.semestre}
-            onChange={v => setSubjectForm({ ...subjectForm, semestre: v })}
-            options={semesters}
+            onChange={(v) => setSubjectForm({ ...subjectForm, semestre: v })}
+            options={[
+              "Premier semestre",
+              "Deuxième semestre"
+            ]}
           />
 
-          <Field
-            label="Nom de la matière"
-            value={subjectForm.nom}
-            onChange={v => setSubjectForm({ ...subjectForm, nom: v })}
-            placeholder="Ex : Anatomie"
-            required
-          />
-
-          <button
-            className="primary-button full-button"
-            type="submit"
-            disabled={busy}
-          >
-            {busy ? "Enregistrement..." : "Créer la matière"}
+          <button className="primary-button full" disabled={busy}>
+            {busy ? "Création..." : "Créer la matière"}
           </button>
         </form>
-      </Modal>
-    );
+      )
+    });
   }
 
   function CourseModal() {
-    return (
-      <Modal title="Publier une leçon">
-        <form onSubmit={ajouterLecon} className="modal-form">
+    return Modal({
+      title: "Publier un cours",
+      onClose: () => setModal(""),
+      children: (
+        <form onSubmit={ajouterLecon}>
           <Field
             label="Titre de la leçon"
             value={courseForm.titre}
-            onChange={v => setCourseForm({ ...courseForm, titre: v })}
-            placeholder="Ex : Introduction à l'anatomie"
+            onChange={(v) => setCourseForm({ ...courseForm, titre: v })}
             required
           />
 
           <SelectField
             label="Matière"
             value={courseForm.matiereId}
-            onChange={v => setCourseForm({ ...courseForm, matiereId: v })}
-            options={subjects.map(s => ({
+            onChange={(v) => setCourseForm({ ...courseForm, matiereId: v })}
+            options={subjects.map((s) => ({
               value: s.id,
-              label: `${s.nom} — ${s.niveau}`
+              label: s.nom
             }))}
           />
 
           <label className="field">
-            <span>Document PDF depuis ton appareil</span>
+            <span>Document PDF</span>
             <input
               type="file"
               accept="application/pdf,.pdf"
-              onChange={e => setLessonFile(e.target.files?.[0] || null)}
+              onChange={(e) => setLessonFile(e.target.files?.[0] || null)}
             />
           </label>
 
@@ -1786,195 +1165,176 @@ export default function HomePage() {
             </p>
           )}
 
-          <div className="separator-text">OU</div>
+          {uploading && (
+            <div className="upload-progress">
+              <div className="upload-progress-info">
+                <span>Envoi du document</span>
+                <strong>{uploadProgress}%</strong>
+              </div>
+              <div className="upload-progress-track">
+                <div
+                  className="upload-progress-fill"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           <Field
-            label="Lien PDF externe (facultatif)"
+            label="Ou lien PDF externe"
             value={courseForm.url}
-            onChange={v => setCourseForm({ ...courseForm, url: v })}
+            onChange={(v) => setCourseForm({ ...courseForm, url: v })}
             placeholder="https://..."
           />
 
           <label className="field">
-            <span>Description (facultatif)</span>
+            <span>Description</span>
             <textarea
-              rows={3}
               value={courseForm.description}
-              onChange={e =>
+              onChange={(e) =>
                 setCourseForm({
                   ...courseForm,
                   description: e.target.value
                 })
               }
-              placeholder="Quelques informations sur cette leçon..."
+              rows={3}
             />
           </label>
 
-          <button
-            className="primary-button full-button"
-            type="submit"
-            disabled={busy}
-          >
-            {busy ? "Publication en cours..." : "Publier la leçon"}
+          <button className="primary-button full" disabled={busy}>
+            {busy ? "Publication en cours..." : "Publier le cours"}
           </button>
         </form>
-      </Modal>
-    );
+      )
+    });
   }
 
   function ExamModal() {
-    return (
-      <Modal title="Ajouter un examen">
-        <form onSubmit={ajouterExamen} className="modal-form">
+    return Modal({
+      title: "Ajouter un examen",
+      onClose: () => setModal(""),
+      children: (
+        <form onSubmit={ajouterExamen}>
           <Field
             label="Titre de l'examen"
             value={examForm.titre}
-            onChange={v => setExamForm({ ...examForm, titre: v })}
-            placeholder="Ex : Examen d'anatomie"
+            onChange={(v) => setExamForm({ ...examForm, titre: v })}
             required
-          />
-
-          <Field
-            label="Université"
-            value={examForm.universite}
-            onChange={v => setExamForm({ ...examForm, universite: v })}
-            placeholder="UCAD"
-          />
-
-          <Field
-            label="Filière"
-            value={examForm.filiere}
-            onChange={v => setExamForm({ ...examForm, filiere: v })}
-            placeholder="Médecine"
-          />
-
-          <Field
-            label="Niveau"
-            value={examForm.niveau}
-            onChange={v => setExamForm({ ...examForm, niveau: v })}
-            placeholder="Deuxième année"
           />
 
           <SelectField
-            label="Semestre"
-            value={examForm.semestre}
-            onChange={v => setExamForm({ ...examForm, semestre: v })}
-            options={semesters}
-          />
-
-          <Field
             label="Matière"
-            value={examForm.matiere}
-            onChange={v => setExamForm({ ...examForm, matiere: v })}
-            placeholder="Anatomie"
-            required
+            value={examForm.matiereId}
+            onChange={(v) => setExamForm({ ...examForm, matiereId: v })}
+            options={subjects.map((s) => ({
+              value: s.id,
+              label: s.nom
+            }))}
           />
 
           <Field
-            label="Année de l'examen"
+            label="Année"
             value={examForm.annee}
-            onChange={v => setExamForm({ ...examForm, annee: v })}
-            placeholder="2025-2026"
+            onChange={(v) => setExamForm({ ...examForm, annee: v })}
+            placeholder="Ex : 2025-2026"
           />
 
+          <label className="field">
+            <span>Fichier PDF du sujet</span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(e) => setExamFile(e.target.files?.[0] || null)}
+            />
+          </label>
+
           <Field
-            label="Lien du sujet PDF"
-            value={examForm.url}
-            onChange={v => setExamForm({ ...examForm, url: v })}
+            label="Ou lien du sujet"
+            value={examForm.sujetUrl}
+            onChange={(v) => setExamForm({ ...examForm, sujetUrl: v })}
             placeholder="https://..."
-            required
           />
 
+          <label className="field">
+            <span>Fichier PDF de la correction</span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(e) => setCorrectionFile(e.target.files?.[0] || null)}
+            />
+          </label>
+
           <Field
-            label="Lien de correction PDF (facultatif)"
+            label="Ou lien de la correction"
             value={examForm.correctionUrl}
-            onChange={v => setExamForm({ ...examForm, correctionUrl: v })}
+            onChange={(v) => setExamForm({ ...examForm, correctionUrl: v })}
             placeholder="https://..."
           />
 
-          <button
-            className="primary-button full-button"
-            type="submit"
-            disabled={busy}
-          >
-            {busy ? "Enregistrement..." : "Publier l'examen"}
+          <button className="primary-button full" disabled={busy}>
+            {busy ? "Enregistrement..." : "Ajouter l'examen"}
           </button>
         </form>
-      </Modal>
+      )
+    });
+  }
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <Stethoscope size={38} />
+        <h2>DN Med Study</h2>
+        <LoaderCircle className="spin" />
+        <p>Chargement de ton espace...</p>
+      </div>
     );
   }
 
-  /* =====================================================
-     RENDU DES RÉSULTATS
-  ===================================================== */
-
-  const pageContent = {
-    home: <Dashboard />,
-    courses: <CoursesPage />,
-    exams: <ExamsPage />,
-    revision: <RevisionPage />,
-    ai: <AIPage />,
-    admin: <AdminPage />,
-    settings: <SettingsPage />
+  const pageRenderers = {
+    home: Dashboard,
+    courses: CoursesPage,
+    exams: ExamsPage,
+    revision: RevisionPage,
+    ai: AIPage,
+    admin: AdminPage,
+    settings: SettingsPage
   };
 
-  /* =====================================================
-     INTERFACE PRINCIPALE
-  ===================================================== */
-
   return (
-    <main className={`app-shell ${dark ? "dark-mode" : ""}`}>
+    <main className={dark ? "app-shell dark" : "app-shell"}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">DN</div>
+          <div className="brand-icon"><Stethoscope size={25} /></div>
           <div>
-            <strong>DN MED STUDY</strong>
-            <span>Plateforme médicale</span>
+            <strong>DN Med Study</strong>
+            <small>Plateforme médicale</small>
           </div>
         </div>
 
-        <div className="sidebar-label">MENU PRINCIPAL</div>
-
-        <nav className="side-navigation">
-          {NAVIGATION.map(item => (
+        <nav>
+          {NAVIGATION.filter((item) =>
+            item.id !== "admin" || isAdmin
+          ).map(({ id, label, icon: Icon }) => (
             <button
-              key={item.id}
-              className={active === item.id ? "nav-item active" : "nav-item"}
-              onClick={() => navigate(item.id)}
+              key={id}
+              className={active === id ? "nav-item active" : "nav-item"}
+              onClick={() => {
+                setActive(id);
+                setMobileMenu(false);
+              }}
             >
-              <item.icon size={19} />
-              <span>{item.label}</span>
+              <Icon size={19} />
+              <span>{label}</span>
+              {active === id && <ChevronRight size={17} />}
             </button>
           ))}
-
-          {isAdmin && (
-            <button
-              className={active === "admin" ? "nav-item active" : "nav-item"}
-              onClick={() => navigate("admin")}
-            >
-              <ShieldCheck size={19} />
-              <span>Administration</span>
-            </button>
-          )}
         </nav>
 
-        <div className="sidebar-bottom">
-          <button
-            className={active === "settings" ? "nav-item active" : "nav-item"}
-            onClick={() => navigate("settings")}
-          >
-            <Settings size={19} />
-            <span>Paramètres</span>
-          </button>
-
-          <div className="sidebar-profile">
-            <div className="avatar">
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <strong>{displayName}</strong>
-              <span>{isAdmin ? "Administrateur" : "Étudiant"}</span>
-            </div>
+        <div className="sidebar-user">
+          <div className="avatar"><UserRound size={20} /></div>
+          <div>
+            <strong>{displayName}</strong>
+            <small>{isAdmin ? "Administrateur" : "Étudiant"}</small>
           </div>
         </div>
       </aside>
@@ -1990,90 +1350,70 @@ export default function HomePage() {
 
           <div className="topbar-title">
             <span>DN MED STUDY</span>
-            <strong>
-              {NAVIGATION.find(n => n.id === active)?.label ||
-                (active === "admin"
-                  ? "Administration"
-                  : "Paramètres")}
-            </strong>
+            <strong>{NAVIGATION.find((n) => n.id === active)?.label}</strong>
           </div>
 
-          <div className="topbar-right">
-            <button
-              className="icon-button"
-              onClick={() => setDark(!dark)}
-              title="Changer le thème"
-            >
-              {dark ? <Eye size={19} /> : <Settings size={19} />}
-            </button>
-
-            <div className="topbar-avatar">
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-          </div>
+          <button
+            className="icon-button"
+            onClick={() => chargerDonnees()}
+            title="Actualiser"
+          >
+            <RefreshCw size={19} />
+          </button>
         </header>
 
         {mobileMenu && (
           <div className="mobile-dropdown">
-            {NAVIGATION.map(item => (
+            {NAVIGATION.filter((item) =>
+              item.id !== "admin" || isAdmin
+            ).map(({ id, label, icon: Icon }) => (
               <button
-                key={item.id}
-                onClick={() => navigate(item.id)}
+                key={id}
+                onClick={() => {
+                  setActive(id);
+                  setMobileMenu(false);
+                }}
               >
-                <item.icon size={19} /> {item.label}
+                <Icon size={19} /> {label}
               </button>
             ))}
-
-            {isAdmin && (
-              <button onClick={() => navigate("admin")}>
-                <ShieldCheck size={19} /> Administration
-              </button>
-            )}
-
-            <button onClick={() => navigate("settings")}>
-              <Settings size={19} /> Paramètres
-            </button>
-
-            <button onClick={deconnexion}>
-              <LogOut size={19} /> Déconnexion
-            </button>
           </div>
         )}
 
         <div className="page-wrapper">
-          {pageContent[active] || <Dashboard />}
+          {(pageRenderers[active] || Dashboard)()}
         </div>
       </section>
 
       <nav className="mobile-bottom-nav">
-        {NAVIGATION.slice(0, 4).map(item => (
+        {NAVIGATION.filter((n) =>
+          ["home", "courses", "exams", "ai"].includes(n.id)
+        ).map(({ id, label, icon: Icon }) => (
           <button
-            key={item.id}
-            className={active === item.id ? "active" : ""}
-            onClick={() => navigate(item.id)}
+            key={id}
+            className={active === id ? "active" : ""}
+            onClick={() => setActive(id)}
           >
-            <item.icon size={20} />
-            <span>{item.label}</span>
+            <Icon size={20} />
+            <span>{label}</span>
           </button>
         ))}
       </nav>
 
-      {modal === "subject" && <SubjectModal />}
-      {modal === "course" && <CourseModal />}
-      {modal === "exam" && <ExamModal />}
+      {modal === "subject" && SubjectModal()}
+      {modal === "course" && CourseModal()}
+      {modal === "exam" && ExamModal()}
 
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-
         * {
           box-sizing: border-box;
         }
 
         body {
           margin: 0;
-          font-family: 'DM Sans', sans-serif;
-          background: #F5F7FB;
-          color: #172B43;
+          font-family: Arial, Helvetica, sans-serif;
+          background: #f4f7fb;
+          color: #172337;
         }
 
         button, input, select, textarea {
@@ -2084,910 +1424,748 @@ export default function HomePage() {
           cursor: pointer;
         }
 
-        button:disabled {
-          opacity: .6;
-          cursor: not-allowed;
-        }
-
         .app-shell {
           min-height: 100vh;
           display: flex;
-          background: #F5F7FB;
-          color: #172B43;
+          background: #f4f7fb;
+          color: #172337;
         }
 
         .sidebar {
           width: 255px;
-          background: #10243A;
-          color: white;
-          padding: 26px 17px;
+          min-width: 255px;
+          background: #fff;
+          border-right: 1px solid #e7edf4;
+          padding: 25px 15px;
           display: flex;
           flex-direction: column;
-          flex-shrink: 0;
           min-height: 100vh;
+          position: fixed;
+          inset: 0 auto 0 0;
+          z-index: 10;
         }
 
         .brand {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 0 8px 38px;
+          padding: 0 10px 30px;
         }
 
-        .brand-mark {
-          width: 43px;
-          height: 43px;
+        .brand-icon {
+          width: 45px;
+          height: 45px;
           border-radius: 13px;
+          background: #e9f1ff;
+          color: #2563eb;
           display: grid;
           place-items: center;
-          color: white;
-          background: linear-gradient(135deg, #2563EB, #06B6D4);
-          font-size: 19px;
-          font-weight: 800;
+        }
+
+        .brand strong, .brand small {
+          display: block;
         }
 
         .brand strong {
-          display: block;
-          font-size: 14px;
-          letter-spacing: .5px;
+          font-size: 17px;
         }
 
-        .brand span {
-          display: block;
+        .brand small {
+          color: #8491a5;
           margin-top: 4px;
           font-size: 11px;
-          color: #AAB8C8;
         }
 
-        .sidebar-label {
-          padding: 0 11px;
-          color: #91A4B8;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 1.3px;
-          margin-bottom: 14px;
-        }
-
-        .side-navigation {
+        .sidebar nav {
           display: grid;
           gap: 7px;
         }
 
         .nav-item {
+          border: 0;
+          background: transparent;
+          color: #64748b;
           display: flex;
           align-items: center;
           gap: 13px;
-          width: 100%;
-          padding: 13px 12px;
-          border: 0;
-          border-radius: 10px;
-          background: transparent;
-          color: #BDCAD8;
+          padding: 13px 14px;
+          border-radius: 11px;
           text-align: left;
-          font-size: 13px;
-          font-weight: 600;
+          width: 100%;
         }
 
-        .nav-item:hover,
-        .nav-item.active {
-          color: white;
-          background: #243D59;
+        .nav-item span {
+          flex: 1;
         }
 
         .nav-item.active {
-          box-shadow: inset 3px 0 #3B82F6;
+          color: #2563eb;
+          background: #edf4ff;
+          font-weight: 700;
         }
 
-        .sidebar-bottom {
+        .sidebar-user {
           margin-top: auto;
-        }
-
-        .sidebar-profile {
+          padding: 18px 8px 0;
+          border-top: 1px solid #edf0f5;
           display: flex;
           align-items: center;
-          gap: 11px;
-          border-top: 1px solid #31475D;
-          margin-top: 20px;
-          padding: 20px 5px 0;
+          gap: 10px;
         }
 
-        .avatar, .topbar-avatar {
-          width: 37px;
-          height: 37px;
+        .avatar {
+          width: 38px;
+          height: 38px;
+          background: #e9f1ff;
+          color: #2563eb;
           border-radius: 50%;
           display: grid;
           place-items: center;
-          background: #2563EB;
-          color: white;
-          font-weight: 800;
         }
 
-        .sidebar-profile strong {
+        .sidebar-user strong, .sidebar-user small {
           display: block;
-          font-size: 12px;
         }
 
-        .sidebar-profile span {
-          display: block;
-          color: #AAB8C8;
-          font-size: 10px;
+        .sidebar-user small {
+          color: #8491a5;
           margin-top: 4px;
         }
 
         .main-area {
           flex: 1;
+          margin-left: 255px;
           min-width: 0;
         }
 
         .topbar {
-          height: 75px;
-          background: white;
-          border-bottom: 1px solid #E8EDF3;
+          height: 76px;
+          background: #fff;
+          border-bottom: 1px solid #e7edf4;
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 0 35px;
+          position: sticky;
+          top: 0;
+          z-index: 5;
         }
 
         .topbar-title span {
           display: block;
           font-size: 10px;
-          color: #8494A7;
-          letter-spacing: 1px;
-          font-weight: 700;
+          color: #8b99aa;
+          letter-spacing: 1.4px;
+          margin-bottom: 5px;
         }
 
         .topbar-title strong {
-          display: block;
-          margin-top: 3px;
-          font-size: 16px;
-        }
-
-        .topbar-right {
-          display: flex;
-          align-items: center;
-          gap: 16px;
+          font-size: 18px;
         }
 
         .page-wrapper {
-          max-width: 1450px;
+          max-width: 1400px;
           margin: auto;
+          padding: 32px 35px 70px;
+        }
+
+        .welcome {
           padding: 35px;
-        }
-
-        .page-content {
-          display: grid;
-          gap: 27px;
-        }
-
-        .section-title {
+          background: linear-gradient(120deg, #123b7a, #2563eb);
+          color: white;
+          border-radius: 20px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 20px;
+          margin-bottom: 25px;
+        }
+
+        .welcome h1 {
+          font-size: 28px;
+          margin: 8px 0;
+        }
+
+        .welcome p {
+          color: #dce8ff;
+          margin-bottom: 0;
         }
 
         .eyebrow {
-          color: #2563EB;
-          font-size: 10px;
-          letter-spacing: 1.5px;
-          font-weight: 800;
-          margin-bottom: 8px;
-        }
-
-        .section-title h1 {
-          font-size: 29px;
-          margin: 0;
-          font-weight: 800;
-          letter-spacing: -.7px;
-        }
-
-        .section-title p {
-          color: #7B8A9B;
-          font-size: 13px;
-          margin: 8px 0 0;
-        }
-
-        .welcome-card {
-          min-height: 225px;
-          border-radius: 19px;
-          background: linear-gradient(110deg, #10243A, #1D4770);
-          color: white;
-          padding: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          overflow: hidden;
-        }
-
-        .welcome-label {
-          font-size: 10px;
+          font-size: 11px;
           letter-spacing: 2px;
-          color: #8BC8FF;
-          font-weight: 800;
-        }
-
-        .welcome-card h2 {
-          font-size: 29px;
-          margin: 13px 0 8px;
-        }
-
-        .welcome-card p {
-          max-width: 480px;
-          color: #C1D2E4;
-          font-size: 13px;
-          line-height: 1.7;
-        }
-
-        .welcome-card button {
-          margin-top: 12px;
-          padding: 11px 16px;
-          border: 0;
-          border-radius: 9px;
-          background: white;
-          color: #10243A;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-weight: 700;
-          font-size: 12px;
         }
 
         .welcome-icon {
-          color: #8BC8FF;
-          opacity: .65;
-          padding: 20px;
+          width: 75px;
+          height: 75px;
+          border-radius: 20px;
+          background: #ffffff22;
+          display: grid;
+          place-items: center;
         }
 
         .stats-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 15px;
+          gap: 16px;
+          margin-bottom: 30px;
         }
 
         .stat-card {
-          min-height: 100px;
           background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 14px;
-          padding: 18px;
-          display: flex;
-          align-items: center;
-          gap: 13px;
-        }
-
-        .stat-card strong {
-          display: block;
-          font-size: 23px;
-          font-weight: 800;
-        }
-
-        .stat-card span {
-          display: block;
-          font-size: 11px;
-          color: #8391A2;
-          margin-top: 5px;
-        }
-
-        .icon-tile {
-          width: 45px;
-          height: 45px;
-          display: grid;
-          place-items: center;
-          border-radius: 12px;
-          flex-shrink: 0;
-        }
-
-        .content-section {
-          display: grid;
-          gap: 17px;
-        }
-
-        .section-heading {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-        }
-
-        .section-heading h2 {
-          font-size: 18px;
-          margin: 0;
-        }
-
-        .section-heading p {
-          color: #8391A2;
-          font-size: 12px;
-          margin: 5px 0 0;
-        }
-
-        .tools-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 16px;
-        }
-
-        .tool-card {
-          background: white;
-          border: 1px solid #E9EEF4;
+          border: 1px solid #e9eef5;
           border-radius: 15px;
-          text-align: left;
-          padding: 21px;
-          transition: .2s;
-        }
-
-        .tool-card:hover, .subject-card:hover, .admin-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 12px 25px #172B4310;
-        }
-
-        .tool-card h3 {
-          font-size: 15px;
-          margin: 17px 0 7px;
-        }
-
-        .tool-card p {
-          font-size: 12px;
-          color: #8391A2;
-          line-height: 1.6;
-          min-height: 38px;
-        }
-
-        .tool-arrow {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          margin-top: 17px;
-          color: #2563EB;
-          font-size: 12px;
-          font-weight: 700;
-        }
-
-        .text-button {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          border: 0;
-          background: transparent;
-          color: #2563EB;
-          font-size: 12px;
-          font-weight: 700;
-        }
-
-        .history-list, .lesson-list {
-          display: grid;
-          gap: 10px;
-        }
-
-        .history-item, .lesson-card {
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 12px;
-          padding: 13px 16px;
-          display: flex;
-          align-items: center;
-          gap: 13px;
-        }
-
-        .history-info, .lesson-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .history-info strong, .lesson-info h3 {
-          display: block;
-          font-size: 13px;
-          margin: 0;
-        }
-
-        .history-info span, .lesson-info p {
-          display: block;
-          font-size: 11px;
-          color: #8391A2;
-          margin: 5px 0 0;
-        }
-
-        .history-date {
-          color: #8391A2;
-          font-size: 11px;
-        }
-
-        .filter-panel {
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 14px;
-          padding: 17px;
-          display: grid;
-          gap: 13px;
-        }
-
-        .search-box {
-          height: 43px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          border: 1px solid #E4EAF1;
-          border-radius: 9px;
-          padding: 0 12px;
-          color: #8391A2;
-        }
-
-        .search-box input {
-          width: 100%;
-          border: 0;
-          outline: none;
-          color: #172B43;
-          background: transparent;
-          font-size: 12px;
-        }
-
-        .filters-row {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-        }
-
-        .filters-row select, .field input, .field select,
-        .field textarea {
-          width: 100%;
-          min-height: 42px;
-          border: 1px solid #E2E8F0;
-          border-radius: 9px;
-          padding: 10px 12px;
-          background: white;
-          color: #172B43;
-          outline: none;
-          font-size: 12px;
-        }
-
-        .subjects-grid, .exams-grid, .admin-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 15px;
-        }
-
-        .subject-card, .exam-card, .admin-card {
-          position: relative;
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 14px;
-          padding: 19px;
-          transition: .2s;
-        }
-
-        .subject-main {
-          display: block;
-          width: 100%;
-          border: 0;
-          background: transparent;
-          text-align: left;
-          padding: 0;
-          color: inherit;
-        }
-
-        .subject-main h3, .exam-card h3, .admin-card h3 {
-          font-size: 15px;
-          margin: 14px 0 6px;
-        }
-
-        .subject-main p, .exam-card p, .admin-card p {
-          font-size: 11px;
-          color: #8391A2;
-          margin: 0 0 10px;
-        }
-
-        .subject-main > span {
-          font-size: 10px;
-          color: #2563EB;
-          font-weight: 700;
-        }
-
-        .subject-footer {
-          border-top: 1px solid #EDF1F5;
-          padding-top: 12px;
-          margin-top: 14px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          color: #2563EB;
-          font-size: 11px;
-          font-weight: 700;
-        }
-
-        .delete-subject, .delete-exam {
-          border: 0;
-          background: #FEECEC;
-          color: #DC2626;
-          border-radius: 8px;
-          padding: 8px;
-        }
-
-        .delete-subject {
-          position: absolute;
-          top: 17px;
-          right: 17px;
-        }
-
-        .primary-button, .outline-button {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          border-radius: 9px;
-          padding: 11px 14px;
-          font-size: 12px;
-          font-weight: 700;
-          text-decoration: none;
-          white-space: nowrap;
-        }
-
-        .primary-button {
-          border: 1px solid #2563EB;
-          background: #2563EB;
-          color: white;
-        }
-
-        .primary-button:hover {
-          background: #1D4ED8;
-        }
-
-        .outline-button {
-          border: 1px solid #DCE5EF;
-          background: white;
-          color: #2563EB;
-        }
-
-        .outline-button:hover {
-          background: #EFF6FF;
-        }
-
-        .icon-button {
-          width: 37px;
-          height: 37px;
-          display: inline-grid;
-          place-items: center;
-          border: 1px solid #E7EDF4;
-          border-radius: 9px;
-          background: white;
-          color: #526579;
-        }
-
-        .danger {
-          color: #DC2626;
-        }
-
-        .exam-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .exam-year {
-          font-size: 10px;
-          color: #8391A2;
-        }
-
-        .exam-details {
-          display: flex;
-          gap: 7px;
-          margin: 14px 0;
-        }
-
-        .exam-details span {
-          padding: 6px 9px;
-          background: #F1F5F9;
-          border-radius: 6px;
-          font-size: 10px;
-          color: #526579;
-        }
-
-        .exam-actions {
+          padding: 20px;
           display: grid;
           gap: 9px;
         }
 
-        .no-correction {
-          font-size: 11px;
-          color: #8391A2;
-          text-align: center;
+        .stat-icon {
+          color: #2563eb;
         }
 
-        .delete-exam {
-          margin-top: 13px;
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
+        .stat-card strong {
+          font-size: 27px;
         }
 
-        .back-button {
-          border: 0;
-          background: transparent;
-          color: #2563EB;
+        .stat-card span {
+          color: #8290a3;
+          font-size: 13px;
+        }
+
+        .section-title {
           display: flex;
+          justify-content: space-between;
           align-items: center;
-          gap: 7px;
-          font-size: 12px;
+          margin: 30px 0 16px;
+          gap: 10px;
+        }
+
+        .section-title h2 {
+          font-size: 19px;
+          margin: 0;
+        }
+
+        .section-title button {
+          border: 0;
+          color: #2563eb;
+          background: #edf4ff;
+          border-radius: 9px;
+          padding: 10px 13px;
           font-weight: 700;
         }
 
-        .empty-state {
+        .quick-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 13px;
+        }
+
+        .quick-card {
+          display: flex;
+          align-items: center;
+          gap: 13px;
+          padding: 19px;
           background: white;
-          border: 1px dashed #DCE5EF;
-          border-radius: 14px;
-          padding: 45px 20px;
-          text-align: center;
+          border: 1px solid #e9eef5;
+          border-radius: 13px;
+          color: #2563eb;
+          text-align: left;
         }
 
-        .empty-icon {
-          color: #94A3B8;
-          margin-bottom: 12px;
+        .quick-card span {
+          flex: 1;
+          color: #26364c;
+          font-weight: 700;
         }
 
-        .empty-state h3 {
-          margin: 0;
-          font-size: 15px;
+        .list-card {
+          background: white;
+          border: 1px solid #e9eef5;
+          border-radius: 15px;
+          padding: 8px 18px;
         }
 
-        .empty-state p {
+        .list-row, .exam-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 16px 0;
+          border-bottom: 1px solid #edf0f5;
+        }
+
+        .list-row:last-child, .exam-row:last-child {
+          border-bottom: 0;
+        }
+
+        .list-row > div {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .list-row strong, .list-row small {
+          display: block;
+        }
+
+        .list-row small {
+          color: #8491a5;
+          margin-top: 5px;
+        }
+
+        .list-row > svg {
+          color: #2563eb;
+        }
+
+        .list-row a, .list-row button {
+          color: #2563eb;
+          background: transparent;
+          border: 0;
+        }
+
+        .filters {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 20px;
+        }
+
+        .search-box {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 13px;
+          background: white;
+          border: 1px solid #e1e8f0;
+          border-radius: 10px;
+          min-height: 46px;
+          flex: 1;
+          color: #8290a3;
+          margin-bottom: 15px;
+        }
+
+        .search-box input {
+          border: 0;
+          outline: 0;
+          background: transparent;
+          width: 100%;
+          min-width: 0;
+        }
+
+        .filters select {
+          min-width: 190px;
+          padding: 10px;
+          border: 1px solid #e1e8f0;
+          border-radius: 10px;
+          background: white;
+        }
+
+        .course-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 17px;
+        }
+
+        .course-card {
+          background: white;
+          border: 1px solid #e9eef5;
+          border-radius: 15px;
+          padding: 20px;
+          min-width: 0;
+        }
+
+        .course-icon {
+          color: #2563eb;
+          background: #edf4ff;
+          width: 43px;
+          height: 43px;
+          border-radius: 12px;
+          display: grid;
+          place-items: center;
+          flex-shrink: 0;
+        }
+
+        .course-card > small {
+          display: block;
+          color: #2563eb;
+          margin-top: 15px;
+        }
+
+        .course-card h3 {
+          font-size: 16px;
+        }
+
+        .course-card p {
+          color: #7c899b;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .primary-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          background: #2563eb;
+          color: white;
+          border: 0;
+          border-radius: 10px;
+          padding: 12px 16px;
+          text-decoration: none;
+          font-weight: 700;
+        }
+
+        .primary-button:disabled {
+          opacity: .6;
+          cursor: not-allowed;
+        }
+
+        .full {
+          width: 100%;
+          margin-top: 15px;
+        }
+
+        .delete-button {
+          border: 0;
+          background: #fff0f0;
+          color: #dc2626;
+          border-radius: 8px;
+          padding: 9px;
+          margin-top: 10px;
+          display: flex;
+          gap: 6px;
+        }
+
+        .small-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          border-radius: 8px;
+          padding: 9px 12px;
+          color: white;
+          background: #2563eb;
+          text-decoration: none;
           font-size: 12px;
-          color: #8391A2;
         }
 
-        .ai-container, .settings-card {
+        .small-button.secondary {
+          background: #e9f1ff;
+          color: #2563eb;
+        }
+
+        .exam-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .exam-info strong, .exam-info span {
+          display: block;
+        }
+
+        .exam-info span, .unavailable {
+          font-size: 12px;
+          color: #8491a5;
+          margin-top: 5px;
+        }
+
+        .icon-button {
+          border: 0;
+          background: #edf4ff;
+          color: #2563eb;
+          width: 39px;
+          height: 39px;
+          border-radius: 10px;
+          display: grid;
+          place-items: center;
+        }
+
+        .icon-button.danger {
+          color: #dc2626;
+          background: #fff0f0;
+        }
+
+        .empty-state {
+          text-align: center;
+          padding: 35px 15px;
+          color: #94a3b8;
+          grid-column: 1 / -1;
+        }
+
+        .empty-state svg {
+          margin-bottom: 10px;
+        }
+
+        .ai-card, .result-card {
           background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 16px;
+          border: 1px solid #e9eef5;
+          border-radius: 17px;
           padding: 25px;
         }
 
-        .ai-intro {
+        .ai-heading {
           display: flex;
           gap: 15px;
-          align-items: center;
-          margin-bottom: 23px;
+          color: #2563eb;
+          margin-bottom: 22px;
         }
 
-        .ai-logo {
-          width: 55px;
-          height: 55px;
-          display: grid;
-          place-items: center;
-          background: #EAF1FF;
-          color: #2563EB;
-          border-radius: 15px;
+        .ai-heading h2 {
+          color: #172337;
+          font-size: 19px;
+          margin: 0 0 7px;
         }
 
-        .ai-intro h2 {
-          font-size: 17px;
-          margin: 0 0 6px;
-        }
-
-        .ai-intro p {
-          color: #8391A2;
-          font-size: 12px;
+        .ai-heading p {
+          color: #8491a5;
           margin: 0;
         }
 
-        .upload-area {
+        .upload-zone {
+          border: 2px dashed #cbd8e8;
+          border-radius: 14px;
           min-height: 150px;
-          border: 2px dashed #CBD8E7;
-          border-radius: 13px;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           gap: 9px;
-          color: #2563EB;
-          background: #F8FAFC;
+          color: #2563eb;
           cursor: pointer;
+          padding: 20px;
+          text-align: center;
         }
 
-        .upload-area strong {
-          font-size: 13px;
-          color: #172B43;
+        .upload-zone input {
+          display: none;
         }
 
-        .upload-area span {
-          font-size: 11px;
-          color: #8391A2;
+        .upload-zone span {
+          color: #8491a5;
+          font-size: 12px;
         }
 
         .ai-actions {
           display: flex;
-          flex-wrap: wrap;
           gap: 9px;
-          margin: 18px 0;
+          margin-top: 18px;
+          flex-wrap: wrap;
         }
 
-        .ai-action {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 13px;
-          border: 1px solid #E2E8F0;
-          border-radius: 9px;
+        .chip, .active-chip {
+          border: 1px solid #dce5f0;
+          border-radius: 20px;
+          padding: 9px 16px;
           background: white;
-          color: #526579;
-          font-size: 11px;
+          color: #64748b;
+        }
+
+        .active-chip {
+          background: #edf4ff;
+          border-color: #2563eb;
+          color: #2563eb;
           font-weight: 700;
         }
 
-        .ai-action.selected {
-          background: #EFF6FF;
-          color: #2563EB;
-          border-color: #93C5FD;
+        .question-form {
+          display: flex;
+          align-items: end;
+          gap: 12px;
+          margin-top: 20px;
+        }
+
+        .question-form .field {
+          flex: 1;
+        }
+
+        .result-card {
+          margin-top: 20px;
+          position: relative;
+        }
+
+        .result-card pre {
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          font-family: inherit;
+          line-height: 1.7;
+          color: #475569;
+        }
+
+        .admin-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 15px;
+        }
+
+        .admin-grid button {
+          display: grid;
+          gap: 10px;
+          text-align: left;
+          background: white;
+          color: #2563eb;
+          border: 1px solid #e9eef5;
+          border-radius: 14px;
+          padding: 20px;
+        }
+
+        .admin-grid strong {
+          color: #172337;
+        }
+
+        .admin-grid span {
+          color: #8491a5;
+          font-size: 12px;
+        }
+
+        .settings-card, .settings-action {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+          background: white;
+          border: 1px solid #e9eef5;
+          padding: 18px;
+          border-radius: 13px;
+          width: 100%;
+          margin-bottom: 12px;
+          text-align: left;
+          color: #2563eb;
+        }
+
+        .settings-card p {
+          color: #8491a5;
+          margin-bottom: 0;
+        }
+
+        .settings-action span {
+          flex: 1;
+          color: #172337;
+        }
+
+        .settings-action strong {
+          color: #2563eb;
+        }
+
+        .settings-action.logout {
+          color: #dc2626;
+        }
+
+        .settings-action.logout span {
+          color: #dc2626;
         }
 
         .field {
           display: grid;
-          gap: 7px;
-          margin-bottom: 15px;
+          gap: 8px;
+          margin-bottom: 16px;
+          color: #475569;
+          font-size: 13px;
         }
 
-        .field > span {
-          color: #526579;
-          font-size: 11px;
-          font-weight: 700;
-        }
-
-        .field textarea {
-          resize: vertical;
-          min-height: 90px;
-        }
-
-        .ai-submit {
+        .field input, .field select, .field textarea {
           width: 100%;
-          min-height: 46px;
+          min-height: 45px;
+          padding: 11px 12px;
+          border: 1px solid #dce5f0;
+          border-radius: 9px;
+          background: white;
+          color: #172337;
+          outline: none;
         }
 
-        .ai-result {
-          margin-top: 25px;
-          border-top: 1px solid #E9EEF4;
-          padding-top: 23px;
+        .field input:focus, .field select:focus, .field textarea:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 3px #2563eb18;
         }
 
-        .result-header {
+        .file-selected {
+          color: #2563eb;
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-        }
-
-        .result-header h2 {
-          font-size: 18px;
-          margin: 0;
-        }
-
-        .result-content {
-          white-space: pre-wrap;
-          line-height: 1.8;
-          font-size: 13px;
-          color: #334155;
-          background: #F8FAFC;
-          padding: 20px;
-          border-radius: 11px;
-          margin-top: 15px;
+          gap: 8px;
           overflow-wrap: anywhere;
         }
 
-        .admin-card {
-          text-align: left;
-          color: inherit;
-          cursor: pointer;
+        .upload-progress {
+          margin: 12px 0 18px;
         }
 
-        .admin-card > svg {
-          position: absolute;
-          right: 18px;
-          bottom: 20px;
-          color: #2563EB;
-        }
-
-        .settings-card {
-          display: grid;
-        }
-
-        .settings-row {
+        .upload-progress-info {
           display: flex;
-          align-items: center;
-          gap: 14px;
-          padding: 17px 0;
-          border-bottom: 1px solid #EDF1F5;
+          justify-content: space-between;
+          font-size: 12px;
+          margin-bottom: 8px;
+          color: #526579;
         }
 
-        .settings-row:last-child {
-          border-bottom: 0;
+        .upload-progress-track {
+          height: 9px;
+          width: 100%;
+          border-radius: 20px;
+          overflow: hidden;
+          background: #e2e8f0;
         }
 
-        .settings-row > div:nth-child(2) {
-          flex: 1;
-        }
-
-        .settings-row strong {
-          font-size: 13px;
-        }
-
-        .settings-row p {
-          font-size: 11px;
-          color: #8391A2;
-          margin: 5px 0 0;
+        .upload-progress-fill {
+          height: 100%;
+          background: #2563eb;
+          border-radius: 20px;
+          transition: width .2s ease;
         }
 
         .modal-overlay {
           position: fixed;
           inset: 0;
+          background: #0f172a99;
           z-index: 100;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 18px;
-          background: #0F172A99;
+          display: grid;
+          place-items: center;
+          padding: 15px;
           overflow-y: auto;
         }
 
         .modal-card {
-          width: 100%;
-          max-width: 520px;
-          max-height: 90vh;
+          width: min(100%, 540px);
+          max-height: 92vh;
           overflow-y: auto;
           background: white;
-          border-radius: 16px;
+          border-radius: 17px;
           padding: 23px;
-          box-shadow: 0 25px 80px #0003;
         }
 
         .modal-header {
           display: flex;
-          align-items: center;
           justify-content: space-between;
+          align-items: center;
           margin-bottom: 22px;
         }
 
         .modal-header h2 {
-          font-size: 18px;
+          font-size: 19px;
           margin: 0;
         }
 
-        .modal-form {
-          display: grid;
-          gap: 2px;
-        }
-
-        .full-button {
-          width: 100%;
-          margin-top: 9px;
-        }
-
-        .file-selected {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 11px;
-          color: #059669;
-          overflow-wrap: anywhere;
-        }
-
-        .separator-text {
-          text-align: center;
-          font-size: 10px;
-          font-weight: 800;
-          color: #94A3B8;
-          margin: 5px 0 13px;
+        .modal-header button {
+          background: #edf4ff;
+          border: 0;
+          color: #2563eb;
+          width: 35px;
+          height: 35px;
+          border-radius: 9px;
         }
 
         .loading-screen {
           min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 15px;
-          background: #F5F7FB;
+          display: grid;
+          place-content: center;
+          justify-items: center;
+          gap: 13px;
+          color: #2563eb;
+        }
+
+        .loading-screen h2 {
+          color: #172337;
         }
 
         .loading-screen p {
-          color: #8391A2;
-          font-size: 12px;
+          color: #8491a5;
         }
 
         .spin {
@@ -3002,82 +2180,74 @@ export default function HomePage() {
           display: none;
         }
 
-        .dark-mode {
-          background: #101D2C;
-          color: #E5EDF7;
+        .dark {
+          background: #101827;
+          color: #e5edf8;
         }
 
-        .dark-mode .main-area,
-        .dark-mode .page-wrapper {
-          background: #101D2C;
+        .dark .main-area,
+        .dark .page-wrapper {
+          background: #101827;
         }
 
-        .dark-mode .topbar,
-        .dark-mode .stat-card,
-        .dark-mode .tool-card,
-        .dark-mode .subject-card,
-        .dark-mode .exam-card,
-        .dark-mode .admin-card,
-        .dark-mode .history-item,
-        .dark-mode .lesson-card,
-        .dark-mode .filter-panel,
-        .dark-mode .ai-container,
-        .dark-mode .settings-card,
-        .dark-mode .empty-state {
-          background: #192A3C;
-          border-color: #2C4055;
-          color: #E5EDF7;
+        .dark .topbar,
+        .dark .sidebar,
+        .dark .stat-card,
+        .dark .quick-card,
+        .dark .list-card,
+        .dark .course-card,
+        .dark .ai-card,
+        .dark .result-card,
+        .dark .admin-grid button,
+        .dark .settings-card,
+        .dark .settings-action {
+          background: #1c293a;
+          border-color: #334155;
+          color: #e5edf8;
         }
 
-        .dark-mode .section-title p,
-        .dark-mode .section-heading p,
-        .dark-mode .tool-card p,
-        .dark-mode .subject-main p,
-        .dark-mode .exam-card p,
-        .dark-mode .admin-card p,
-        .dark-mode .history-info span,
-        .dark-mode .lesson-info p {
-          color: #A9B8C8;
+        .dark .quick-card span,
+        .dark .admin-grid strong,
+        .dark .settings-action span,
+        .dark .ai-heading h2 {
+          color: #e5edf8;
         }
 
-        .dark-mode .search-box,
-        .dark-mode .filters-row select,
-        .dark-mode .field input,
-        .dark-mode .field select,
-        .dark-mode .field textarea,
-        .dark-mode .outline-button,
-        .dark-mode .icon-button {
-          background: #192A3C;
-          color: #E5EDF7;
-          border-color: #354A60;
-        }
-
-        .dark-mode .search-box input {
+        .dark .field input,
+        .dark .field select,
+        .dark .field textarea {
+          background: #1c293a;
+          border-color: #475569;
           color: white;
         }
 
-        .dark-mode .result-content {
-          background: #10243A;
-          color: #E5EDF7;
+        .dark .nav-item {
+          color: #b4c2d4;
+        }
+
+        .dark .nav-item.active {
+          background: #263d60;
+          color: #8bb7ff;
         }
 
         @media (max-width: 1050px) {
-          .stats-grid {
+          .course-grid {
             grid-template-columns: repeat(2, 1fr);
           }
 
-          .subjects-grid, .exams-grid, .admin-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-
-          .page-wrapper {
-            padding: 25px;
+          .admin-grid {
+            grid-template-columns: 1fr 1fr;
           }
         }
 
-        @media (max-width: 700px) {
+        @media (max-width: 760px) {
           .sidebar {
             display: none;
+          }
+
+          .main-area {
+            margin-left: 0;
+            padding-bottom: 75px;
           }
 
           .topbar {
@@ -3088,56 +2258,24 @@ export default function HomePage() {
           .mobile-menu-button {
             display: grid;
             place-items: center;
-            width: 38px;
-            height: 38px;
             border: 0;
-            border-radius: 9px;
-            background: #EFF6FF;
-            color: #2563EB;
-          }
-
-          .topbar-title {
-            flex: 1;
-            margin-left: 12px;
-          }
-
-          .topbar-title span {
-            font-size: 9px;
-          }
-
-          .topbar-title strong {
-            font-size: 13px;
-          }
-
-          .topbar-right {
-            gap: 8px;
-          }
-
-          .topbar-avatar {
-            width: 32px;
-            height: 32px;
+            background: #edf4ff;
+            color: #2563eb;
+            width: 39px;
+            height: 39px;
+            border-radius: 10px;
           }
 
           .page-wrapper {
-            padding: 22px 15px 100px;
+            padding: 20px 15px 35px;
           }
 
-          .section-title {
-            align-items: flex-start;
-            flex-direction: column;
+          .welcome {
+            padding: 24px 20px;
           }
 
-          .section-title h1 {
-            font-size: 24px;
-          }
-
-          .welcome-card {
-            padding: 23px;
-            min-height: 190px;
-          }
-
-          .welcome-card h2 {
-            font-size: 23px;
+          .welcome h1 {
+            font-size: 22px;
           }
 
           .welcome-icon {
@@ -3145,135 +2283,113 @@ export default function HomePage() {
           }
 
           .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
             gap: 10px;
           }
 
           .stat-card {
-            padding: 13px;
-            min-height: 83px;
-            gap: 9px;
-          }
-
-          .stat-card .icon-tile {
-            width: 37px;
-            height: 37px;
+            padding: 15px;
           }
 
           .stat-card strong {
-            font-size: 19px;
+            font-size: 23px;
           }
 
-          .stat-card span {
-            font-size: 10px;
-          }
-
-          .tools-grid, .subjects-grid, .exams-grid, .admin-grid {
+          .quick-grid {
             grid-template-columns: 1fr;
           }
 
-          .filters-row {
+          .course-grid {
             grid-template-columns: 1fr;
           }
 
-          .history-item, .lesson-card {
+          .filters {
+            flex-direction: column;
+          }
+
+          .filters select {
+            width: 100%;
+          }
+
+          .admin-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .exam-row {
             flex-wrap: wrap;
           }
 
-          .history-date {
-            margin-left: auto;
-          }
-
-          .lesson-info {
-            min-width: 55%;
-          }
-
-          .ai-container {
-            padding: 17px;
-          }
-
-          .ai-actions {
+          .question-form {
             display: grid;
-            grid-template-columns: 1fr;
           }
 
           .mobile-dropdown {
             display: grid;
             position: absolute;
-            z-index: 50;
-            top: 60px;
+            top: 65px;
             left: 12px;
-            width: min(260px, calc(100vw - 24px));
+            right: 12px;
             background: white;
-            border: 1px solid #E5EAF0;
-            border-radius: 12px;
+            border: 1px solid #e7edf4;
+            box-shadow: 0 12px 30px #0002;
+            border-radius: 13px;
+            z-index: 30;
             padding: 8px;
-            box-shadow: 0 15px 35px #0002;
           }
 
           .mobile-dropdown button {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
             border: 0;
-            border-radius: 8px;
             background: transparent;
-            color: #172B43;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 13px;
+            color: #475569;
             text-align: left;
-            font-size: 12px;
-          }
-
-          .mobile-dropdown button:hover {
-            background: #EFF6FF;
-            color: #2563EB;
           }
 
           .mobile-bottom-nav {
+            display: flex;
             position: fixed;
-            z-index: 40;
             bottom: 0;
             left: 0;
             right: 0;
             height: 67px;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
             background: white;
-            border-top: 1px solid #E8EDF3;
+            border-top: 1px solid #e7edf4;
+            justify-content: space-around;
+            z-index: 20;
             padding-bottom: env(safe-area-inset-bottom);
           }
 
           .mobile-bottom-nav button {
+            display: grid;
+            place-content: center;
+            justify-items: center;
+            gap: 4px;
             border: 0;
             background: transparent;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            color: #8391A2;
-            font-size: 9px;
+            color: #8491a5;
+            font-size: 10px;
           }
 
           .mobile-bottom-nav button.active {
-            color: #2563EB;
-            font-weight: 800;
+            color: #2563eb;
           }
 
-          .dark-mode .mobile-bottom-nav,
-          .dark-mode .mobile-dropdown {
-            background: #192A3C;
-            border-color: #354A60;
-          }
-
-          .dark-mode .mobile-dropdown button {
-            color: #E5EDF7;
+          .modal-overlay {
+            align-items: end;
+            padding: 0;
           }
 
           .modal-card {
-            padding: 18px;
+            width: 100%;
+            max-height: 92vh;
+            border-radius: 18px 18px 0 0;
+            padding: 20px 16px;
           }
         }
       `}</style>
     </main>
   );
-                }
+            }
