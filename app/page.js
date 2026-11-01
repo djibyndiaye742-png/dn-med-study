@@ -20,7 +20,8 @@ const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
 
 const sections = [
   { id: "dashboard", label: "Tableau de bord", icon: "⌂" },
-  { id: "courses", label: "Mes cours", icon: "▤" },
+  { id: "courses", label: "Bibliothèque des cours", icon: "📚" },
+  { id: "exams", label: "Anciens examens", icon: "📝" },
   { id: "resume", label: "Mes résumés", icon: "▧" },
   { id: "qcm", label: "Mes QCM", icon: "☷" },
   { id: "flashcards", label: "Flashcards", icon: "▣" },
@@ -35,6 +36,22 @@ const colors = {
   rose: "#e65b83"
 };
 
+const niveauxDisponibles = [
+  "1re année",
+  "2e année",
+  "3e année",
+  "4e année",
+  "5e année",
+  "6e année",
+  "7e année"
+];
+
+const formulaireVide = {
+  universite: "UCAD",
+  filiere: "Médecine",
+  niveau: "2e année"
+};
+
 export default function Home() {
   const router = useRouter();
 
@@ -42,8 +59,8 @@ export default function Home() {
   const [nom, setNom] = useState("Étudiant");
   const [chargement, setChargement] = useState(true);
   const [menuOuvert, setMenuOuvert] = useState(false);
-
   const [section, setSection] = useState("dashboard");
+
   const [fichier, setFichier] = useState(null);
   const [action, setAction] = useState("");
   const [question, setQuestion] = useState("");
@@ -54,26 +71,45 @@ export default function Home() {
   const [chargementHistorique, setChargementHistorique] = useState(false);
 
   const [cours, setCours] = useState([]);
+  const [matieres, setMatieres] = useState([]);
+  const [examens, setExamens] = useState([]);
+
   const [chargementCours, setChargementCours] = useState(false);
+  const [chargementExamens, setChargementExamens] = useState(false);
+
   const [rechercheCours, setRechercheCours] = useState("");
   const [filtreUniversite, setFiltreUniversite] = useState("Toutes");
   const [filtreNiveau, setFiltreNiveau] = useState("Tous");
-  const [filtreMatiere, setFiltreMatiere] = useState("Toutes");
+  const [matiereSelectionnee, setMatiereSelectionnee] = useState("");
+
+  const [rechercheExamen, setRechercheExamen] = useState("");
+  const [filtreNiveauExamen, setFiltreNiveauExamen] = useState("Tous");
 
   const [theme, setTheme] = useState("light");
   const [couleur, setCouleur] = useState("blue");
 
-  // Formulaire d'administration
+  const [nouvelleMatiere, setNouvelleMatiere] = useState({
+    ...formulaireVide,
+    nom: ""
+  });
+
   const [nouveauCours, setNouveauCours] = useState({
+    ...formulaireVide,
     titre: "",
-    universite: "UCAD",
-    filiere: "Médecine",
-    niveau: "2e année",
     matiere: "",
     url: ""
   });
 
-  const [publicationCours, setPublicationCours] = useState(false);
+  const [nouvelExamen, setNouvelExamen] = useState({
+    ...formulaireVide,
+    titre: "",
+    matiere: "",
+    annee: "",
+    sujetUrl: "",
+    correctionUrl: ""
+  });
+
+  const [publication, setPublication] = useState(false);
   const [messageAdmin, setMessageAdmin] = useState("");
 
   const estAdmin =
@@ -96,9 +132,7 @@ export default function Home() {
     const savedColor = localStorage.getItem("dn-color");
 
     if (savedTheme) setTheme(savedTheme);
-    if (savedColor && colors[savedColor]) {
-      setCouleur(savedColor);
-    }
+    if (savedColor && colors[savedColor]) setCouleur(savedColor);
   }, []);
 
   useEffect(() => {
@@ -131,7 +165,9 @@ export default function Home() {
 
         await Promise.all([
           chargerHistorique(u.uid),
-          chargerCours()
+          chargerCours(),
+          chargerMatieres(),
+          chargerExamens()
         ]);
       } catch (e) {
         console.error("Erreur de chargement :", e);
@@ -147,18 +183,8 @@ export default function Home() {
     setChargementHistorique(true);
 
     try {
-      const ref = collection(
-        db,
-        "users",
-        uid,
-        "resultats"
-      );
-
-      const q = query(
-        ref,
-        orderBy("createdAt", "desc")
-      );
-
+      const ref = collection(db, "users", uid, "resultats");
+      const q = query(ref, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
 
       setHistorique(
@@ -178,80 +204,126 @@ export default function Home() {
     setChargementCours(true);
 
     try {
-      const snapshot = await getDocs(
-        collection(db, "cours")
+      const snapshot = await getDocs(collection(db, "cours"));
+
+      setCours(
+        snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data()
+        }))
       );
 
-      const elements = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data()
-      }));
-
-      setCours(elements);
       setErreur("");
     } catch (e) {
-      console.error("Erreur bibliothèque :", e);
-      setErreur(
-        "Impossible de charger la bibliothèque. Vérifie les règles Firestore."
-      );
+      console.error("Erreur cours :", e);
+      setErreur("Impossible de charger les cours. Vérifie les règles Firestore.");
     } finally {
       setChargementCours(false);
     }
   }
 
-  // Publication d'un cours par l'administrateur
+  async function chargerMatieres() {
+    try {
+      const snapshot = await getDocs(collection(db, "matieres"));
+
+      setMatieres(
+        snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data()
+        }))
+      );
+    } catch (e) {
+      console.error("Erreur matières :", e);
+    }
+  }
+
+  async function chargerExamens() {
+    setChargementExamens(true);
+
+    try {
+      const snapshot = await getDocs(collection(db, "examens"));
+
+      setExamens(
+        snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data()
+        }))
+      );
+    } catch (e) {
+      console.error("Erreur examens :", e);
+    } finally {
+      setChargementExamens(false);
+    }
+  }
+
+  function lienValide(lien) {
+    try {
+      return new URL(lien).protocol === "https:";
+    } catch {
+      return false;
+    }
+  }
+
+  async function publierMatiere(e) {
+    e.preventDefault();
+    setMessageAdmin("");
+
+    if (!estAdmin) return;
+
+    if (!nouvelleMatiere.nom.trim()) {
+      setMessageAdmin("Saisis le nom de la matière.");
+      return;
+    }
+
+    setPublication(true);
+
+    try {
+      await addDoc(collection(db, "matieres"), {
+        ...nouvelleMatiere,
+        nom: nouvelleMatiere.nom.trim(),
+        createdAt: serverTimestamp(),
+        createdBy: user.uid
+      });
+
+      setNouvelleMatiere({
+        ...formulaireVide,
+        nom: ""
+      });
+
+      setMessageAdmin("Matière ajoutée avec succès !");
+      await chargerMatieres();
+    } catch (e) {
+      console.error(e);
+      setMessageAdmin("Impossible d'ajouter cette matière. Vérifie les règles Firestore.");
+    } finally {
+      setPublication(false);
+    }
+  }
+
   async function publierCours(e) {
     e.preventDefault();
     setMessageAdmin("");
 
-    if (!estAdmin) {
-      setMessageAdmin(
-        "Accès réservé à l'administrateur."
-      );
+    if (!estAdmin) return;
+
+    const { titre, matiere, url } = nouveauCours;
+
+    if (!titre.trim() || !matiere.trim() || !url.trim()) {
+      setMessageAdmin("Complète le titre, la matière et le lien PDF.");
       return;
     }
 
-    const {
-      titre,
-      universite,
-      filiere,
-      niveau,
-      matiere,
-      url
-    } = nouveauCours;
-
-    if (
-      !titre.trim() ||
-      !matiere.trim() ||
-      !url.trim()
-    ) {
-      setMessageAdmin(
-        "Remplis le titre, la matière et le lien PDF."
-      );
+    if (!lienValide(url)) {
+      setMessageAdmin("Le lien PDF doit être une adresse HTTPS valide.");
       return;
     }
 
-    try {
-      new URL(url);
-
-      if (!url.startsWith("https://")) {
-        throw new Error("Lien HTTPS obligatoire");
-      }
-    } catch {
-      setMessageAdmin(
-        "Entre un lien PDF valide commençant par https://"
-      );
-      return;
-    }
-
-    setPublicationCours(true);
+    setPublication(true);
 
     try {
       await addDoc(collection(db, "cours"), {
+        ...nouveauCours,
         titre: titre.trim(),
-        universite,
-        filiere,
-        niveau,
         matiere: matiere.trim(),
         url: url.trim(),
         createdAt: serverTimestamp(),
@@ -259,55 +331,108 @@ export default function Home() {
       });
 
       setNouveauCours({
+        ...formulaireVide,
         titre: "",
-        universite: "UCAD",
-        filiere: "Médecine",
-        niveau: "2e année",
         matiere: "",
         url: ""
       });
 
-      setMessageAdmin(
-        "Cours publié avec succès. Il est maintenant visible dans la bibliothèque."
-      );
-
+      setMessageAdmin("Cours publié avec succès !");
       await chargerCours();
     } catch (e) {
       console.error(e);
-
-      setMessageAdmin(
-        "Publication impossible. Vérifie les règles Firestore et le lien."
-      );
+      setMessageAdmin("Publication impossible. Vérifie les règles Firestore.");
     } finally {
-      setPublicationCours(false);
+      setPublication(false);
     }
   }
 
-  // Suppression d'un cours par l'administrateur
-  async function supprimerCours(id) {
-    if (
-      !estAdmin ||
-      !window.confirm(
-        "Supprimer définitivement ce cours de la bibliothèque ?"
-      )
-    ) {
+  async function publierExamen(e) {
+    e.preventDefault();
+    setMessageAdmin("");
+
+    if (!estAdmin) return;
+
+    const {
+      titre,
+      matiere,
+      annee,
+      sujetUrl,
+      correctionUrl
+    } = nouvelExamen;
+
+    if (!titre.trim() || !matiere.trim() || !annee || !sujetUrl.trim()) {
+      setMessageAdmin("Complète le titre, la matière, l'année et le sujet.");
       return;
     }
 
+    if (!lienValide(sujetUrl)) {
+      setMessageAdmin("Le lien du sujet doit être une adresse HTTPS valide.");
+      return;
+    }
+
+    if (correctionUrl && !lienValide(correctionUrl)) {
+      setMessageAdmin("Le lien de correction doit être une adresse HTTPS valide.");
+      return;
+    }
+
+    setPublication(true);
+
     try {
-      await deleteDoc(doc(db, "cours", id));
+      await addDoc(collection(db, "examens"), {
+        ...nouvelExamen,
+        titre: titre.trim(),
+        matiere: matiere.trim(),
+        annee: String(annee),
+        sujetUrl: sujetUrl.trim(),
+        correctionUrl: correctionUrl.trim(),
+        createdAt: serverTimestamp(),
+        createdBy: user.uid
+      });
 
-      setCours((ancien) =>
-        ancien.filter((c) => c.id !== id)
-      );
+      setNouvelExamen({
+        ...formulaireVide,
+        titre: "",
+        matiere: "",
+        annee: "",
+        sujetUrl: "",
+        correctionUrl: ""
+      });
 
-      setMessageAdmin("Cours supprimé.");
+      setMessageAdmin("Examen publié avec succès !");
+      await chargerExamens();
     } catch (e) {
       console.error(e);
+      setMessageAdmin("Publication impossible. Vérifie les règles Firestore.");
+    } finally {
+      setPublication(false);
+    }
+  }
 
-      setMessageAdmin(
-        "Suppression impossible. Vérifie les règles Firestore."
-      );
+  async function supprimerDocument(collectionName, id, message) {
+    if (!estAdmin) return;
+
+    if (!window.confirm(message)) return;
+
+    try {
+      await deleteDoc(doc(db, collectionName, id));
+
+      if (collectionName === "cours") {
+        setCours((ancien) => ancien.filter((x) => x.id !== id));
+      }
+
+      if (collectionName === "matieres") {
+        setMatieres((ancien) => ancien.filter((x) => x.id !== id));
+      }
+
+      if (collectionName === "examens") {
+        setExamens((ancien) => ancien.filter((x) => x.id !== id));
+      }
+
+      setMessageAdmin("Suppression effectuée.");
+    } catch (e) {
+      console.error(e);
+      setMessageAdmin("Suppression impossible. Vérifie les règles Firestore.");
     }
   }
 
@@ -320,9 +445,7 @@ export default function Home() {
     setErreur("");
 
     if (!fichier) {
-      setErreur(
-        "Sélectionne d'abord un cours au format PDF."
-      );
+      setErreur("Sélectionne d'abord un cours au format PDF.");
       return;
     }
 
@@ -352,9 +475,7 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Erreur pendant l'analyse."
-        );
+        throw new Error(data.error || "Erreur pendant l'analyse.");
       }
 
       const titres = {
@@ -373,12 +494,7 @@ export default function Home() {
         date: new Date().toISOString()
       };
 
-      const ref = collection(
-        db,
-        "users",
-        user.uid,
-        "resultats"
-      );
+      const ref = collection(db, "users", user.uid, "resultats");
 
       const docRef = await addDoc(ref, {
         ...nouveauResultat,
@@ -391,18 +507,11 @@ export default function Home() {
       };
 
       setResultatActuel(resultatEnregistre);
-
-      setHistorique((ancien) => [
-        resultatEnregistre,
-        ...ancien
-      ]);
-
+      setHistorique((ancien) => [resultatEnregistre, ...ancien]);
       setSection(type);
     } catch (e) {
       console.error(e);
-      setErreur(
-        e.message || "Une erreur est survenue."
-      );
+      setErreur(e.message || "Une erreur est survenue.");
     } finally {
       setAction("");
     }
@@ -417,13 +526,9 @@ export default function Home() {
   function formatDate(date) {
     if (!date) return "Date inconnue";
 
-    const d = date?.toDate
-      ? date.toDate()
-      : new Date(date);
+    const d = date?.toDate ? date.toDate() : new Date(date);
 
-    if (Number.isNaN(d.getTime())) {
-      return "Date inconnue";
-    }
+    if (Number.isNaN(d.getTime())) return "Date inconnue";
 
     return d.toLocaleDateString("fr-FR", {
       day: "2-digit",
@@ -437,56 +542,36 @@ export default function Home() {
     setResultatActuel(null);
     setMenuOuvert(false);
     setErreur("");
+    setMessageAdmin("");
+    setMatiereSelectionnee("");
   }
 
   function copierResultat() {
     if (!resultatActuel?.contenu) return;
 
-    navigator.clipboard.writeText(
-      resultatActuel.contenu
-    );
-
+    navigator.clipboard.writeText(resultatActuel.contenu);
     alert("Contenu copié !");
   }
 
-  function selectionnerCoursBibliotheque(item) {
-    const url =
-      item.url ||
-      item.pdfUrl ||
-      item.fichierUrl ||
-      item.lien;
-
+  function ouvrirPDF(url) {
     if (!url) {
-      setErreur(
-        "Ce cours ne possède pas encore de lien PDF."
-      );
+      setErreur("Aucun lien PDF disponible.");
       return;
     }
 
-    window.open(
-      url,
-      "_blank",
-      "noopener,noreferrer"
-    );
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   const compteurs = {
-    resume: historique.filter(
-      (x) => x.type === "resume"
-    ).length,
-
-    qcm: historique.filter(
-      (x) => x.type === "qcm"
-    ).length,
-
-    flashcards: historique.filter(
-      (x) => x.type === "flashcards"
-    ).length
+    resume: historique.filter((x) => x.type === "resume").length,
+    qcm: historique.filter((x) => x.type === "qcm").length,
+    flashcards: historique.filter((x) => x.type === "flashcards").length
   };
 
   const titres = {
     dashboard: "Tableau de bord",
-    courses: "Mes cours",
+    courses: "Bibliothèque des cours",
+    exams: "Anciens examens",
     resume: "Mes résumés",
     qcm: "Mes QCM",
     flashcards: "Mes flashcards",
@@ -494,96 +579,39 @@ export default function Home() {
     settings: "Paramètres"
   };
 
-  const contenusSection = historique.filter(
-    (item) => item.type === section
-  );
+  const contenusSection = historique.filter((item) => item.type === section);
 
   const universites = useMemo(
-    () => [
-      ...new Set(
-        cours
-          .map((c) => c.universite || c.university)
-          .filter(Boolean)
-      )
-    ],
+    () => [...new Set(cours.map((c) => c.universite).filter(Boolean))],
     [cours]
   );
 
   const niveaux = useMemo(
-    () => [
-      ...new Set(
-        cours
-          .map((c) => c.niveau || c.level)
-          .filter(Boolean)
-      )
-    ],
-    [cours]
-  );
-
-  const matieres = useMemo(
-    () => [
-      ...new Set(
-        cours
-          .map((c) => c.matiere || c.subject)
-          .filter(Boolean)
-      )
-    ],
+    () => [...new Set(cours.map((c) => c.niveau).filter(Boolean))],
     [cours]
   );
 
   const coursFiltres = useMemo(() => {
     return cours.filter((c) => {
-      const titre = c.titre || c.title || "";
-      const matiere = c.matiere || c.subject || "";
-      const universite =
-        c.universite || c.university || "";
-      const niveau = c.niveau || c.level || "";
-
-      const recherche =
-        rechercheCours.toLowerCase();
-
-      const correspondRecherche =
-        titre.toLowerCase().includes(recherche) ||
-        matiere.toLowerCase().includes(recherche) ||
-        universite.toLowerCase().includes(recherche);
-
-      const correspondUniversite =
-        filtreUniversite === "Toutes" ||
-        universite === filtreUniversite;
-
-      const correspondNiveau =
-        filtreNiveau === "Tous" ||
-        niveau === filtreNiveau;
-
-      const correspondMatiere =
-        filtreMatiere === "Toutes" ||
-        matiere === filtreMatiere;
+      const texte = `${c.titre || ""} ${c.matiere || ""} ${c.universite || ""}`.toLowerCase();
 
       return (
-        correspondRecherche &&
-        correspondUniversite &&
-        correspondNiveau &&
-        correspondMatiere
+        texte.includes(rechercheCours.toLowerCase()) &&
+        (filtreUniversite === "Toutes" || c.universite === filtreUniversite) &&
+        (filtreNiveau === "Tous" || c.niveau === filtreNiveau) &&
+        (!matiereSelectionnee || c.matiere === matiereSelectionnee)
       );
     });
-  }, [
-    cours,
-    rechercheCours,
-    filtreUniversite,
-    filtreNiveau,
-    filtreMatiere
-  ]);
+  }, [cours, rechercheCours, filtreUniversite, filtreNiveau, matiereSelectionnee]);
 
-  if (chargement) {
+  const examensFiltres = examens.filter((e) => {
+    const texte = `${e.titre || ""} ${e.matiere || ""} ${e.universite || ""} ${e.annee || ""}`.toLowerCase();
+
     return (
-      <main className="loading-screen">
-        <div className="loading-logo">DN</div>
-        <p>Préparation de ton espace médical...</p>
-      </main>
+      texte.includes(rechercheExamen.toLowerCase()) &&
+      (filtreNiveauExamen === "Tous" || e.niveau === filtreNiveauExamen)
     );
-  }
-
-  if (!user) return null;
+  });
 
   const fieldStyle = {
     width: "100%",
@@ -602,6 +630,17 @@ export default function Home() {
     padding: 20,
     marginBottom: 20
   };
+
+  if (chargement) {
+    return (
+      <main className="loading-screen">
+        <div className="loading-logo">DN</div>
+        <p>Préparation de ton espace médical...</p>
+      </main>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <main
@@ -663,6 +702,7 @@ export default function Home() {
 
         .brand-name { font-size: 16px; font-weight: 850; }
         .brand-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
         .nav-label {
           color: var(--muted);
           font-size: 10px;
@@ -688,22 +728,13 @@ export default function Home() {
           margin: 3px 0;
         }
 
-        .nav-button:hover {
-          background: var(--bg);
-          color: var(--text);
-        }
-
+        .nav-button:hover { background: var(--bg); color: var(--text); }
         .nav-button.active {
           background: color-mix(in srgb, var(--primary), transparent 90%);
           color: var(--primary);
         }
 
-        .nav-icon {
-          width: 21px;
-          text-align: center;
-          font-size: 19px;
-        }
-
+        .nav-icon { width: 21px; text-align: center; font-size: 19px; }
         .sidebar-bottom { margin-top: auto; }
 
         .profile-mini {
@@ -757,11 +788,7 @@ export default function Home() {
           font-size: 17px;
         }
 
-        .content {
-          max-width: 1250px;
-          margin: auto;
-          padding: 35px;
-        }
+        .content { max-width: 1250px; margin: auto; padding: 35px; }
 
         .welcome {
           border-radius: 22px;
@@ -780,18 +807,8 @@ export default function Home() {
           text-transform: uppercase;
         }
 
-        .welcome h1 {
-          font-size: clamp(25px, 3vw, 35px);
-          margin: 13px 0 8px;
-        }
-
-        .welcome p {
-          font-size: 13px;
-          opacity: .85;
-          margin: 0;
-          line-height: 1.7;
-          max-width: 520px;
-        }
+        .welcome h1 { font-size: clamp(25px, 3vw, 35px); margin: 13px 0 8px; }
+        .welcome p { font-size: 13px; opacity: .85; margin: 0; line-height: 1.7; max-width: 600px; }
 
         .section-heading {
           display: flex;
@@ -954,7 +971,7 @@ export default function Home() {
 
         .library-filters {
           display: grid;
-          grid-template-columns: 2fr 1fr 1fr 1fr;
+          grid-template-columns: 2fr 1fr 1fr;
           gap: 10px;
           margin-bottom: 18px;
         }
@@ -967,7 +984,31 @@ export default function Home() {
 
         .course-card h3 { font-size: 14px; margin: 12px 0 8px; }
         .course-card p { font-size: 11px; color: var(--muted); margin: 5px 0; }
-        .course-card .primary-button { margin-top: 14px; }
+        .course-card button { margin-top: 12px; }
+
+        .subject-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 13px;
+          margin: 15px 0 25px;
+        }
+
+        .subject-card {
+          border: 1px solid var(--border);
+          background: var(--surface);
+          border-radius: 15px;
+          padding: 17px;
+          text-align: left;
+          color: var(--text);
+        }
+
+        .subject-card.selected {
+          border: 2px solid var(--primary);
+          background: color-mix(in srgb, var(--primary), transparent 94%);
+        }
+
+        .subject-card strong { display: block; font-size: 13px; margin: 9px 0 5px; }
+        .subject-card small { color: var(--muted); font-size: 11px; }
 
         .loading-screen {
           min-height: 100vh;
@@ -999,6 +1040,7 @@ export default function Home() {
           .content { padding: 22px 17px; }
           .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .library-filters { grid-template-columns: 1fr 1fr; }
+          .subject-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
 
         @media (max-width: 560px) {
@@ -1012,7 +1054,7 @@ export default function Home() {
           .top-subtitle { font-size: 10px; }
           .history-card { align-items: flex-start; }
           .setting-row { align-items: flex-start; flex-direction: column; }
-          .library-filters { grid-template-columns: 1fr; }
+          .library-filters, .subject-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -1117,29 +1159,47 @@ export default function Home() {
             <>
               <section className="welcome">
                 <div className="welcome-tag">
-                  DN Med Study · Ton espace personnel
+                  DN Med Study · Plateforme médicale
                 </div>
 
                 <h1>Bienvenue, {nom} 👋</h1>
 
                 <p>
-                  Apprends, comprends et révise tes cours de médecine
-                  avec ton assistant intelligent.
+                  Tous tes cours de médecine, anciens examens et outils
+                  intelligents réunis dans un seul espace.
                 </p>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
+                  <button
+                    className="primary-button"
+                    style={{ background: "white", color: "#2345a7" }}
+                    onClick={() => changerSection("courses")}
+                  >
+                    Explorer les cours →
+                  </button>
+
+                  <button
+                    className="secondary-button"
+                    style={{ background: "transparent", color: "white", borderColor: "#ffffff80" }}
+                    onClick={() => changerSection("exams")}
+                  >
+                    Anciens examens
+                  </button>
+                </div>
               </section>
 
               <div className="section-heading">
                 <div>
-                  <h2>Ton activité</h2>
-                  <p>Retrouve tes contenus générés.</p>
+                  <h2>La bibliothèque médicale</h2>
+                  <p>Explore les ressources disponibles sur la plateforme.</p>
                 </div>
               </div>
 
               <div className="stats-grid">
                 {[
-                  ["▧", compteurs.resume, "Résumés créés"],
-                  ["☷", compteurs.qcm, "QCM générés"],
-                  ["▣", compteurs.flashcards, "Flashcards créées"]
+                  ["📚", cours.length, "Cours disponibles"],
+                  ["📖", matieres.length, "Matières enregistrées"],
+                  ["📝", examens.length, "Anciens examens"]
                 ].map(([icon, number, label]) => (
                   <div className="stat-card" key={label}>
                     <span className="stat-icon">{icon}</span>
@@ -1151,17 +1211,17 @@ export default function Home() {
 
               <div className="section-heading">
                 <div>
-                  <h2>Outils d'apprentissage</h2>
-                  <p>Choisis ce que tu souhaites travailler.</p>
+                  <h2>Tes outils d'apprentissage</h2>
+                  <p>Travaille tes cours avec l'intelligence artificielle.</p>
                 </div>
               </div>
 
               <div className="tools-grid">
                 {[
-                  ["▧", "Générer un résumé", "Comprends ton cours avec une synthèse structurée.", "resume"],
-                  ["☷", "Créer des QCM", "Teste tes connaissances et consulte les corrections.", "qcm"],
-                  ["▣", "Créer des flashcards", "Mémorise les notions essentielles du cours.", "flashcards"],
-                  ["✧", "Assistant médical IA", "Pose tes questions et approfondis tes connaissances.", "chat"]
+                  ["▧", "Générer un résumé", "Obtiens une synthèse structurée de ton cours.", "resume"],
+                  ["☷", "Créer des QCM", "Teste tes connaissances et révise.", "qcm"],
+                  ["▣", "Créer des flashcards", "Mémorise les notions essentielles.", "flashcards"],
+                  ["✧", "Assistant médical IA", "Pose tes questions sur tes cours.", "chat"]
                 ].map(([icon, title, description, destination]) => (
                   <div className="tool-card" key={destination}>
                     <span className="stat-icon">{icon}</span>
@@ -1179,16 +1239,9 @@ export default function Home() {
 
               <div className="section-heading">
                 <div>
-                  <h2>Activité récente</h2>
+                  <h2>Ton activité récente</h2>
                   <p>Tes dernières générations.</p>
                 </div>
-
-                <button
-                  className="secondary-button"
-                  onClick={() => changerSection("courses")}
-                >
-                  Voir mes cours
-                </button>
               </div>
 
               {historique.length === 0 ? (
@@ -1209,10 +1262,7 @@ export default function Home() {
                           {item.fichier} · {formatDate(item.createdAt || item.date)}
                         </div>
                       </div>
-
-                      <span style={{ color: styles.primary }}>
-                        Ouvrir →
-                      </span>
+                      <span style={{ color: styles.primary }}>Ouvrir →</span>
                     </div>
                   ))}
                 </div>
@@ -1220,189 +1270,234 @@ export default function Home() {
             </>
           )}
 
-          {/* BIBLIOTHÈQUE ET ADMINISTRATION */}
+          {/* BIBLIOTHÈQUE DES COURS */}
 
           {section === "courses" && (
             <>
-              <div className="section-heading">
-                <div>
-                  <h2>Bibliothèque des cours</h2>
-                  <p>
-                    Retrouve les cours partagés par les étudiants.
-                  </p>
-                </div>
-
-                <button
-                  className="secondary-button"
-                  onClick={chargerCours}
-                  disabled={chargementCours}
-                >
-                  {chargementCours ? "Actualisation..." : "↻ Actualiser"}
-                </button>
-              </div>
-
-              {/* FORMULAIRE ADMINISTRATEUR */}
+              <section className="welcome">
+                <div className="welcome-tag">DN MED STUDY · RESSOURCES</div>
+                <h1>Bibliothèque des cours</h1>
+                <p>
+                  Retrouve les supports de cours classés par matière,
+                  université et niveau d'études.
+                </p>
+              </section>
 
               {estAdmin && (
-                <section style={panelStyle}>
-                  <h2 style={{ marginTop: 0, fontSize: 17 }}>
-                    Administration · Ajouter un cours
-                  </h2>
+                <>
+                  <div className="section-heading">
+                    <div>
+                      <h2>Espace administrateur</h2>
+                      <p>Organise les matières et publie les supports de cours.</p>
+                    </div>
+                  </div>
 
-                  <p style={{ color: styles.muted, fontSize: 12 }}>
-                    Ce formulaire publie une fiche et un lien PDF
-                    dans la bibliothèque commune.
-                  </p>
+                  <section style={panelStyle}>
+                    <h3 style={{ marginTop: 0 }}>1. Créer une matière</h3>
 
-                  <form onSubmit={publierCours}>
-                    <input
-                      style={fieldStyle}
-                      placeholder="Titre du cours"
-                      value={nouveauCours.titre}
-                      onChange={(e) =>
-                        setNouveauCours({
-                          ...nouveauCours,
-                          titre: e.target.value
-                        })
-                      }
-                      required
-                    />
-
-                    <div className="library-filters" style={{ marginBottom: 0 }}>
-                      <select
-                        style={fieldStyle}
-                        value={nouveauCours.universite}
-                        onChange={(e) =>
-                          setNouveauCours({
-                            ...nouveauCours,
-                            universite: e.target.value
-                          })
-                        }
-                      >
-                        <option>UCAD</option>
-                        <option>UGB</option>
-                        <option>UASZ</option>
-                        <option>UADB</option>
-                        <option>Autre</option>
-                      </select>
-
-                      <select
-                        style={fieldStyle}
-                        value={nouveauCours.filiere}
-                        onChange={(e) =>
-                          setNouveauCours({
-                            ...nouveauCours,
-                            filiere: e.target.value
-                          })
-                        }
-                      >
-                        <option>Médecine</option>
-                        <option>Pharmacie</option>
-                        <option>Odontologie</option>
-                        <option>Autre</option>
-                      </select>
-
-                      <select
-                        style={fieldStyle}
-                        value={nouveauCours.niveau}
-                        onChange={(e) =>
-                          setNouveauCours({
-                            ...nouveauCours,
-                            niveau: e.target.value
-                          })
-                        }
-                      >
-                        {[
-                          "1re année",
-                          "2e année",
-                          "3e année",
-                          "4e année",
-                          "5e année",
-                          "6e année",
-                          "7e année",
-                          "Autre"
-                        ].map((n) => (
-                          <option key={n}>{n}</option>
-                        ))}
-                      </select>
-
+                    <form onSubmit={publierMatiere}>
                       <input
-                        style={fieldStyle}
-                        placeholder="Matière"
-                        value={nouveauCours.matiere}
+                        className="field"
+                        placeholder="Nom de la matière : Anatomie, Physiologie..."
+                        value={nouvelleMatiere.nom}
                         onChange={(e) =>
-                          setNouveauCours({
-                            ...nouveauCours,
-                            matiere: e.target.value
-                          })
+                          setNouvelleMatiere({ ...nouvelleMatiere, nom: e.target.value })
                         }
                         required
                       />
-                    </div>
 
-                    <input
-                      style={fieldStyle}
-                      type="url"
-                      placeholder="Lien PDF public (https://...)"
-                      value={nouveauCours.url}
-                      onChange={(e) =>
-                        setNouveauCours({
-                          ...nouveauCours,
-                          url: e.target.value
-                        })
-                      }
-                      required
-                    />
+                      <div className="library-filters">
+                        <select
+                          className="field"
+                          value={nouvelleMatiere.universite}
+                          onChange={(e) =>
+                            setNouvelleMatiere({ ...nouvelleMatiere, universite: e.target.value })
+                          }
+                        >
+                          <option>UCAD</option>
+                          <option>UGB</option>
+                          <option>UASZ</option>
+                          <option>UADB</option>
+                          <option>Autre</option>
+                        </select>
 
-                    <button
-                      className="primary-button"
-                      type="submit"
-                      disabled={publicationCours}
-                    >
-                      {publicationCours
-                        ? "Publication..."
-                        : "Publier dans la bibliothèque"}
-                    </button>
-                  </form>
+                        <select
+                          className="field"
+                          value={nouvelleMatiere.filiere}
+                          onChange={(e) =>
+                            setNouvelleMatiere({ ...nouvelleMatiere, filiere: e.target.value })
+                          }
+                        >
+                          <option>Médecine</option>
+                          <option>Pharmacie</option>
+                          <option>Odontologie</option>
+                          <option>Autre</option>
+                        </select>
+
+                        <select
+                          className="field"
+                          value={nouvelleMatiere.niveau}
+                          onChange={(e) =>
+                            setNouvelleMatiere({ ...nouvelleMatiere, niveau: e.target.value })
+                          }
+                        >
+                          {niveauxDisponibles.map((n) => (
+                            <option key={n}>{n}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button className="primary-button" disabled={publication}>
+                        {publication ? "Enregistrement..." : "+ Créer la matière"}
+                      </button>
+                    </form>
+
+                    <h3 style={{ fontSize: 14, marginTop: 25 }}>
+                      Matières enregistrées ({matieres.length})
+                    </h3>
+
+                    {matieres.length === 0 ? (
+                      <p style={{ color: styles.muted, fontSize: 12 }}>
+                        Tu n'as pas encore créé de matière.
+                      </p>
+                    ) : (
+                      <div className="history-list">
+                        {matieres.map((m) => (
+                          <div className="history-card" key={m.id} style={{ cursor: "default" }}>
+                            <div>
+                              <div className="history-title">{m.nom}</div>
+                              <div className="history-meta">
+                                {m.universite} · {m.filiere} · {m.niveau}
+                              </div>
+                            </div>
+
+                            <button
+                              className="secondary-button"
+                              onClick={() =>
+                                supprimerDocument("matieres", m.id, "Supprimer cette matière ?")
+                              }
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <section style={panelStyle}>
+                    <h3 style={{ marginTop: 0 }}>2. Ajouter un cours à une matière</h3>
+
+                    <form onSubmit={publierCours}>
+                      <input
+                        className="field"
+                        placeholder="Titre du cours"
+                        value={nouveauCours.titre}
+                        onChange={(e) =>
+                          setNouveauCours({ ...nouveauCours, titre: e.target.value })
+                        }
+                        required
+                      />
+
+                      <input
+                        className="field"
+                        list="liste-matieres-cours"
+                        placeholder="Matière : Anatomie, Physiologie..."
+                        value={nouveauCours.matiere}
+                        onChange={(e) =>
+                          setNouveauCours({ ...nouveauCours, matiere: e.target.value })
+                        }
+                        required
+                      />
+
+                      <datalist id="liste-matieres-cours">
+                        {matieres.map((m) => <option key={m.id} value={m.nom} />)}
+                      </datalist>
+
+                      <div className="library-filters">
+                        <select
+                          className="field"
+                          value={nouveauCours.universite}
+                          onChange={(e) =>
+                            setNouveauCours({ ...nouveauCours, universite: e.target.value })
+                          }
+                        >
+                          <option>UCAD</option>
+                          <option>UGB</option>
+                          <option>UASZ</option>
+                          <option>UADB</option>
+                          <option>Autre</option>
+                        </select>
+
+                        <select
+                          className="field"
+                          value={nouveauCours.filiere}
+                          onChange={(e) =>
+                            setNouveauCours({ ...nouveauCours, filiere: e.target.value })
+                          }
+                        >
+                          <option>Médecine</option>
+                          <option>Pharmacie</option>
+                          <option>Odontologie</option>
+                          <option>Autre</option>
+                        </select>
+
+                        <select
+                          className="field"
+                          value={nouveauCours.niveau}
+                          onChange={(e) =>
+                            setNouveauCours({ ...nouveauCours, niveau: e.target.value })
+                          }
+                        >
+                          {niveauxDisponibles.map((n) => (
+                            <option key={n}>{n}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <input
+                        className="field"
+                        type="url"
+                        placeholder="Lien PDF public (https://...)"
+                        value={nouveauCours.url}
+                        onChange={(e) =>
+                          setNouveauCours({ ...nouveauCours, url: e.target.value })
+                        }
+                        required
+                      />
+
+                      <button className="primary-button" disabled={publication}>
+                        {publication ? "Publication..." : "Publier le cours"}
+                      </button>
+                    </form>
+                  </section>
 
                   {messageAdmin && (
-                    <p
-                      role="status"
-                      style={{
-                        fontSize: 12,
-                        marginBottom: 0,
-                        color:
-                          messageAdmin.includes("succès") ||
-                          messageAdmin.includes("supprimé")
-                            ? "#0c9b70"
-                            : "#d97706"
-                      }}
-                    >
+                    <div className="error-box" style={{
+                      background: messageAdmin.includes("succès") || messageAdmin.includes("effectuée") ? "#dcfce7" : "#fee2e2",
+                      color: messageAdmin.includes("succès") || messageAdmin.includes("effectuée") ? "#166534" : "#991b1b"
+                    }}>
                       {messageAdmin}
-                    </p>
+                    </div>
                   )}
-                </section>
+                </>
               )}
 
-              {/* FILTRES */}
+              <div className="section-heading">
+                <div>
+                  <h2>Explorer les matières</h2>
+                  <p>Choisis une matière pour afficher ses cours.</p>
+                </div>
+              </div>
 
               <div className="library-filters">
-                <input
-                  className="field"
-                  placeholder="Rechercher un cours, une matière..."
-                  value={rechercheCours}
-                  onChange={(e) => setRechercheCours(e.target.value)}
-                />
-
                 <select
                   className="field"
                   value={filtreUniversite}
                   onChange={(e) => setFiltreUniversite(e.target.value)}
                 >
                   <option value="Toutes">Toutes les universités</option>
-                  {universites.map((u) => (
-                    <option key={u}>{u}</option>
-                  ))}
+                  {universites.map((u) => <option key={u}>{u}</option>)}
                 </select>
 
                 <select
@@ -1411,109 +1506,124 @@ export default function Home() {
                   onChange={(e) => setFiltreNiveau(e.target.value)}
                 >
                   <option value="Tous">Tous les niveaux</option>
-                  {niveaux.map((n) => (
-                    <option key={n}>{n}</option>
-                  ))}
+                  {niveaux.map((n) => <option key={n}>{n}</option>)}
                 </select>
 
-                <select
+                <input
                   className="field"
-                  value={filtreMatiere}
-                  onChange={(e) => setFiltreMatiere(e.target.value)}
+                  placeholder="Rechercher une matière ou un cours..."
+                  value={rechercheCours}
+                  onChange={(e) => setRechercheCours(e.target.value)}
+                />
+              </div>
+
+              <div className="subject-grid">
+                <button
+                  className={`subject-card ${!matiereSelectionnee ? "selected" : ""}`}
+                  onClick={() => setMatiereSelectionnee("")}
                 >
-                  <option value="Toutes">Toutes les matières</option>
-                  {matieres.map((m) => (
-                    <option key={m}>{m}</option>
-                  ))}
-                </select>
+                  <span className="stat-icon">📚</span>
+                  <strong>Toutes les matières</strong>
+                  <small>{cours.length} cours au total</small>
+                </button>
+
+                {matieres
+                  .filter((m) =>
+                    (filtreUniversite === "Toutes" || m.universite === filtreUniversite) &&
+                    (filtreNiveau === "Tous" || m.niveau === filtreNiveau)
+                  )
+                  .map((m) => {
+                    const nombre = cours.filter((c) =>
+                      c.matiere === m.nom &&
+                      (filtreUniversite === "Toutes" || c.universite === filtreUniversite) &&
+                      (filtreNiveau === "Tous" || c.niveau === filtreNiveau)
+                    ).length;
+
+                    return (
+                      <button
+                        key={m.id}
+                        className={`subject-card ${matiereSelectionnee === m.nom ? "selected" : ""}`}
+                        onClick={() => setMatiereSelectionnee(m.nom)}
+                      >
+                        <span className="stat-icon">📖</span>
+                        <strong>{m.nom}</strong>
+                        <small>{m.niveau} · {nombre} cours</small>
+                      </button>
+                    );
+                  })}
+              </div>
+
+              <div className="section-heading">
+                <div>
+                  <h2>
+                    {matiereSelectionnee ? `Cours : ${matiereSelectionnee}` : "Tous les cours"}
+                  </h2>
+                  <p>{coursFiltres.length} document(s) disponible(s).</p>
+                </div>
+
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    chargerCours();
+                    chargerMatieres();
+                  }}
+                >
+                  ↻ Actualiser
+                </button>
               </div>
 
               {chargementCours ? (
-                <div className="empty">
-                  Chargement de la bibliothèque...
-                </div>
+                <div className="empty">Chargement des cours...</div>
               ) : coursFiltres.length === 0 ? (
                 <div className="empty">
-                  <div style={{ fontSize: 30, marginBottom: 12 }}>
-                    📚
-                  </div>
-
-                  <strong>Aucun cours trouvé.</strong>
-
-                  <p>
-                    La bibliothèque est vide ou aucun document
-                    ne correspond à ta recherche.
-                  </p>
+                  <div style={{ fontSize: 35 }}>📚</div>
+                  <h3>Aucun cours disponible dans cette sélection.</h3>
+                  <p>Les documents ajoutés par l'administrateur apparaîtront ici.</p>
                 </div>
               ) : (
-                <>
-                  <p style={{ color: styles.muted, fontSize: 12 }}>
-                    {coursFiltres.length} cours disponible(s)
-                  </p>
+                <div className="course-grid">
+                  {coursFiltres.map((item) => (
+                    <div className="course-card" key={item.id}>
+                      <span className="stat-icon">📄</span>
+                      <h3>{item.titre || "Cours sans titre"}</h3>
+                      <p>Matière : {item.matiere || "Non précisée"}</p>
+                      <p>Université : {item.universite || "Non précisée"}</p>
+                      <p>Filière : {item.filiere || "Non précisée"}</p>
+                      <p>Niveau : {item.niveau || "Non précisé"}</p>
 
-                  <div className="course-grid">
-                    {coursFiltres.map((item) => (
-                      <div className="course-card" key={item.id}>
-                        <span className="stat-icon">📄</span>
+                      <button
+                        className="primary-button"
+                        onClick={() => ouvrirPDF(item.url || item.pdfUrl || item.lien)}
+                      >
+                        Consulter le cours →
+                      </button>
 
-                        <h3>
-                          {item.titre || item.title || "Cours sans titre"}
-                        </h3>
-
-                        <p>
-                          Université : {item.universite || item.university || "Non précisée"}
-                        </p>
-
-                        <p>
-                          Filière : {item.filiere || item.track || "Non précisée"}
-                        </p>
-
-                        <p>
-                          Niveau : {item.niveau || item.level || "Non précisé"}
-                        </p>
-
-                        <p>
-                          Matière : {item.matiere || item.subject || "Non précisée"}
-                        </p>
-
+                      {estAdmin && (
                         <button
-                          className="primary-button"
-                          onClick={() => selectionnerCoursBibliotheque(item)}
+                          className="secondary-button"
+                          style={{ marginLeft: 8 }}
+                          onClick={() =>
+                            supprimerDocument("cours", item.id, "Supprimer définitivement ce cours ?")
+                          }
                         >
-                          Ouvrir le PDF →
+                          Supprimer
                         </button>
-
-                        {estAdmin && (
-                          <button
-                            className="secondary-button"
-                            style={{ marginLeft: 8 }}
-                            onClick={() => supprimerCours(item.id)}
-                          >
-                            Supprimer
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
-
-              {/* IMPORTER UN PDF PERSONNEL */}
 
               <div className="section-heading">
                 <div>
                   <h2>Importer mon propre cours</h2>
-                  <p>
-                    Sélectionne un PDF depuis ton appareil pour travailler
-                    avec Gemini.
-                  </p>
+                  <p>Choisis un PDF depuis ton appareil pour travailler avec l'IA.</p>
                 </div>
               </div>
 
               <div className="upload-box">
                 <div style={{ fontSize: 34 }}>📄</div>
                 <h3>Ajouter un document PDF</h3>
-
                 <p style={{ color: styles.muted, fontSize: 12 }}>
                   Ce document sera utilisé pour tes résumés, QCM,
                   flashcards et questions à l'IA.
@@ -1538,16 +1648,12 @@ export default function Home() {
               <div className="section-heading">
                 <div>
                   <h2>Documents déjà utilisés</h2>
-                  <p>
-                    Tes documents associés aux générations précédentes.
-                  </p>
+                  <p>Tes documents associés aux générations précédentes.</p>
                 </div>
               </div>
 
               {historique.length === 0 ? (
-                <div className="empty">
-                  Aucun document utilisé pour le moment.
-                </div>
+                <div className="empty">Aucun document utilisé pour le moment.</div>
               ) : (
                 <div className="history-list">
                   {[...new Set(historique.map((x) => x.fichier))]
@@ -1555,19 +1661,229 @@ export default function Home() {
                     .map((nomFichier) => (
                       <div className="history-card" key={nomFichier}>
                         <div>
-                          <div className="history-title">
-                            📄 {nomFichier}
-                          </div>
-
+                          <div className="history-title">📄 {nomFichier}</div>
                           <div className="history-meta">
-                            {historique.filter(
-                              (x) => x.fichier === nomFichier
-                            ).length}
+                            {historique.filter((x) => x.fichier === nomFichier).length}
                             {" "}génération(s) associée(s)
                           </div>
                         </div>
                       </div>
                     ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ANCIENS EXAMENS */}
+
+          {section === "exams" && (
+            <>
+              <section className="welcome">
+                <div className="welcome-tag">DN MED STUDY · PRÉPARATION</div>
+                <h1>Anciens examens et corrections</h1>
+                <p>
+                  Entraîne-toi avec les anciens sujets et consulte
+                  leurs corrections pour préparer tes évaluations.
+                </p>
+              </section>
+
+              {estAdmin && (
+                <section style={{ ...panelStyle, marginTop: 22 }}>
+                  <h2 style={{ marginTop: 0 }}>Administration · Ajouter un examen</h2>
+                  <p style={{ color: styles.muted, fontSize: 12 }}>
+                    Ajoute le sujet PDF et, si disponible, sa correction.
+                  </p>
+
+                  <form onSubmit={publierExamen}>
+                    <input
+                      className="field"
+                      placeholder="Titre de l'examen"
+                      value={nouvelExamen.titre}
+                      onChange={(e) =>
+                        setNouvelExamen({ ...nouvelExamen, titre: e.target.value })
+                      }
+                      required
+                    />
+
+                    <input
+                      className="field"
+                      list="liste-matieres-examens"
+                      placeholder="Matière"
+                      value={nouvelExamen.matiere}
+                      onChange={(e) =>
+                        setNouvelExamen({ ...nouvelExamen, matiere: e.target.value })
+                      }
+                      required
+                    />
+
+                    <datalist id="liste-matieres-examens">
+                      {matieres.map((m) => <option key={m.id} value={m.nom} />)}
+                    </datalist>
+
+                    <div className="library-filters">
+                      <select
+                        className="field"
+                        value={nouvelExamen.universite}
+                        onChange={(e) =>
+                          setNouvelExamen({ ...nouvelExamen, universite: e.target.value })
+                        }
+                      >
+                        <option>UCAD</option>
+                        <option>UGB</option>
+                        <option>UASZ</option>
+                        <option>UADB</option>
+                        <option>Autre</option>
+                      </select>
+
+                      <select
+                        className="field"
+                        value={nouvelExamen.filiere}
+                        onChange={(e) =>
+                          setNouvelExamen({ ...nouvelExamen, filiere: e.target.value })
+                        }
+                      >
+                        <option>Médecine</option>
+                        <option>Pharmacie</option>
+                        <option>Odontologie</option>
+                        <option>Autre</option>
+                      </select>
+
+                      <select
+                        className="field"
+                        value={nouvelExamen.niveau}
+                        onChange={(e) =>
+                          setNouvelExamen({ ...nouvelExamen, niveau: e.target.value })
+                        }
+                      >
+                        {niveauxDisponibles.map((n) => <option key={n}>{n}</option>)}
+                      </select>
+                    </div>
+
+                    <input
+                      className="field"
+                      type="number"
+                      placeholder="Année de l'examen (ex. 2025)"
+                      value={nouvelExamen.annee}
+                      onChange={(e) =>
+                        setNouvelExamen({ ...nouvelExamen, annee: e.target.value })
+                      }
+                      required
+                    />
+
+                    <input
+                      className="field"
+                      type="url"
+                      placeholder="Lien HTTPS du sujet PDF"
+                      value={nouvelExamen.sujetUrl}
+                      onChange={(e) =>
+                        setNouvelExamen({ ...nouvelExamen, sujetUrl: e.target.value })
+                      }
+                      required
+                    />
+
+                    <input
+                      className="field"
+                      type="url"
+                      placeholder="Lien HTTPS de la correction PDF (facultatif)"
+                      value={nouvelExamen.correctionUrl}
+                      onChange={(e) =>
+                        setNouvelExamen({ ...nouvelExamen, correctionUrl: e.target.value })
+                      }
+                    />
+
+                    <button className="primary-button" disabled={publication}>
+                      {publication ? "Publication..." : "Publier l'examen"}
+                    </button>
+                  </form>
+
+                  {messageAdmin && (
+                    <p style={{ color: styles.primary, fontSize: 12 }}>
+                      {messageAdmin}
+                    </p>
+                  )}
+                </section>
+              )}
+
+              <div className="section-heading">
+                <div>
+                  <h2>Consulter les examens</h2>
+                  <p>{examensFiltres.length} examen(s) disponible(s).</p>
+                </div>
+
+                <button className="secondary-button" onClick={chargerExamens}>
+                  ↻ Actualiser
+                </button>
+              </div>
+
+              <div className="library-filters">
+                <input
+                  className="field"
+                  placeholder="Rechercher une matière, une année..."
+                  value={rechercheExamen}
+                  onChange={(e) => setRechercheExamen(e.target.value)}
+                />
+
+                <select
+                  className="field"
+                  value={filtreNiveauExamen}
+                  onChange={(e) => setFiltreNiveauExamen(e.target.value)}
+                >
+                  <option value="Tous">Tous les niveaux</option>
+                  {niveauxDisponibles.map((n) => <option key={n}>{n}</option>)}
+                </select>
+              </div>
+
+              {chargementExamens ? (
+                <div className="empty">Chargement des examens...</div>
+              ) : examensFiltres.length === 0 ? (
+                <div className="empty">
+                  <div style={{ fontSize: 35 }}>📝</div>
+                  <h3>Aucun ancien examen disponible</h3>
+                  <p>Les sujets et corrections ajoutés apparaîtront ici.</p>
+                </div>
+              ) : (
+                <div className="course-grid">
+                  {examensFiltres.map((examen) => (
+                    <div className="course-card" key={examen.id}>
+                      <span className="stat-icon">📝</span>
+                      <h3>{examen.titre}</h3>
+                      <p>Matière : {examen.matiere}</p>
+                      <p>Université : {examen.universite}</p>
+                      <p>Filière : {examen.filiere}</p>
+                      <p>Niveau : {examen.niveau}</p>
+                      <p>Année : {examen.annee}</p>
+
+                      <button
+                        className="primary-button"
+                        onClick={() => ouvrirPDF(examen.sujetUrl)}
+                      >
+                        Consulter le sujet →
+                      </button>
+
+                      {examen.correctionUrl ? (
+                        <button
+                          className="secondary-button"
+                          style={{ marginLeft: 8 }}
+                          onClick={() => ouvrirPDF(examen.correctionUrl)}
+                        >
+                          Voir la correction
+                        </button>
+                      ) : (
+                        <p style={{ marginTop: 12 }}>Correction non disponible.</p>
+                      )}
+
+                      {estAdmin && (
+                        <button
+                          className="secondary-button"
+                          onClick={() =>
+                            supprimerDocument("examens", examen.id, "Supprimer cet examen ?")
+                          }
+                        >
+                          Supprimer
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </>
@@ -1584,10 +1900,7 @@ export default function Home() {
                     {section === "qcm" && "Bibliothèque de QCM"}
                     {section === "flashcards" && "Bibliothèque de flashcards"}
                   </h2>
-
-                  <p>
-                    Tes anciennes créations restent disponibles ici.
-                  </p>
+                  <p>Tes anciennes créations restent disponibles ici.</p>
                 </div>
               </div>
 
@@ -1599,7 +1912,7 @@ export default function Home() {
                 <p style={{ color: styles.muted, fontSize: 12 }}>
                   {fichier
                     ? `Document sélectionné : ${fichier.name}`
-                    : "Choisis d'abord un document PDF dans Mes cours."}
+                    : "Choisis d'abord un document PDF dans la bibliothèque."}
                 </p>
 
                 <button
@@ -1627,26 +1940,17 @@ export default function Home() {
 
               {resultatActuel?.type === section && (
                 <div className="result-panel">
-                  <div
-                    className="section-heading"
-                    style={{ marginTop: 0 }}
-                  >
+                  <div className="section-heading" style={{ marginTop: 0 }}>
                     <div>
                       <h2>{resultatActuel.titre}</h2>
                       <p>{resultatActuel.fichier}</p>
                     </div>
-
-                    <button
-                      className="secondary-button"
-                      onClick={copierResultat}
-                    >
+                    <button className="secondary-button" onClick={copierResultat}>
                       Copier
                     </button>
                   </div>
 
-                  <div className="result-content">
-                    {resultatActuel.contenu}
-                  </div>
+                  <div className="result-content">{resultatActuel.contenu}</div>
                 </div>
               )}
 
@@ -1658,9 +1962,7 @@ export default function Home() {
               </div>
 
               {chargementHistorique ? (
-                <div className="empty">
-                  Chargement de tes contenus...
-                </div>
+                <div className="empty">Chargement de tes contenus...</div>
               ) : contenusSection.length === 0 ? (
                 <div className="empty">
                   Aucun contenu enregistré dans cette rubrique.
@@ -1674,18 +1976,12 @@ export default function Home() {
                       onClick={() => ouvrirResultat(item)}
                     >
                       <div>
-                        <div className="history-title">
-                          {item.titre}
-                        </div>
-
+                        <div className="history-title">{item.titre}</div>
                         <div className="history-meta">
                           {item.fichier} · {formatDate(item.createdAt || item.date)}
                         </div>
                       </div>
-
-                      <span style={{ color: styles.primary }}>
-                        Consulter →
-                      </span>
+                      <span style={{ color: styles.primary }}>Consulter →</span>
                     </div>
                   ))}
                 </div>
@@ -1700,21 +1996,15 @@ export default function Home() {
               <div className="section-heading">
                 <div>
                   <h2>Ton tuteur médical intelligent</h2>
-                  <p>
-                    Pose une question à partir d'un cours PDF.
-                  </p>
+                  <p>Pose une question à partir d'un cours PDF.</p>
                 </div>
               </div>
 
               <div className="panel">
-                <h3 style={{ fontSize: 14 }}>
-                  Document de référence
-                </h3>
+                <h3 style={{ fontSize: 14 }}>Document de référence</h3>
 
                 <p style={{ fontSize: 12, color: styles.muted }}>
-                  {fichier
-                    ? fichier.name
-                    : "Aucun PDF sélectionné"}
+                  {fichier ? fichier.name : "Aucun PDF sélectionné"}
                 </p>
 
                 <button
@@ -1724,9 +2014,7 @@ export default function Home() {
                   Choisir un PDF
                 </button>
 
-                <h3 style={{ fontSize: 14, marginTop: 25 }}>
-                  Ta question
-                </h3>
+                <h3 style={{ fontSize: 14, marginTop: 25 }}>Ta question</h3>
 
                 <textarea
                   className="field"
@@ -1741,9 +2029,7 @@ export default function Home() {
                   disabled={!!action}
                   onClick={() => analyser("chat")}
                 >
-                  {action === "chat"
-                    ? "Réponse en cours..."
-                    : "Envoyer ma question"}
+                  {action === "chat" ? "Réponse en cours..." : "Envoyer ma question"}
                 </button>
               </div>
 
@@ -1752,9 +2038,7 @@ export default function Home() {
                   <div className="section-heading">
                     <div>
                       <h2>Anciennes réponses</h2>
-                      <p>
-                        Retrouve tes précédentes conversations.
-                      </p>
+                      <p>Retrouve tes précédentes conversations.</p>
                     </div>
                   </div>
 
@@ -1769,15 +2053,11 @@ export default function Home() {
                           <div className="history-title">
                             {item.question || item.titre}
                           </div>
-
                           <div className="history-meta">
                             {item.fichier} · {formatDate(item.createdAt || item.date)}
                           </div>
                         </div>
-
-                        <span style={{ color: styles.primary }}>
-                          Ouvrir →
-                        </span>
+                        <span style={{ color: styles.primary }}>Ouvrir →</span>
                       </div>
                     ))}
                   </div>
@@ -1786,18 +2066,9 @@ export default function Home() {
 
               {resultatActuel?.type === "chat" && (
                 <div className="result-panel">
-                  <h2 style={{ fontSize: 16 }}>
-                    Réponse de l'assistant
-                  </h2>
-
-                  <div className="result-content">
-                    {resultatActuel.contenu}
-                  </div>
-
-                  <button
-                    className="secondary-button"
-                    onClick={copierResultat}
-                  >
+                  <h2 style={{ fontSize: 16 }}>Réponse de l'assistant</h2>
+                  <div className="result-content">{resultatActuel.contenu}</div>
+                  <button className="secondary-button" onClick={copierResultat}>
                     Copier la réponse
                   </button>
                 </div>
@@ -1812,19 +2083,14 @@ export default function Home() {
               <div className="section-heading">
                 <div>
                   <h2>Personnalise ton espace</h2>
-                  <p>
-                    Adapte l'apparence de DN Med Study à tes préférences.
-                  </p>
+                  <p>Adapte l'apparence de DN Med Study à tes préférences.</p>
                 </div>
               </div>
 
               <div className="panel">
                 <div className="setting-row">
                   <div>
-                    <div className="setting-title">
-                      Thème de l'application
-                    </div>
-
+                    <div className="setting-title">Thème de l'application</div>
                     <div className="setting-description">
                       Choisis entre le mode clair et le mode sombre.
                     </div>
@@ -1840,10 +2106,7 @@ export default function Home() {
 
                 <div className="setting-row">
                   <div>
-                    <div className="setting-title">
-                      Couleur principale
-                    </div>
-
+                    <div className="setting-title">Couleur principale</div>
                     <div className="setting-description">
                       Personnalise la couleur de ton interface.
                     </div>
@@ -1865,19 +2128,13 @@ export default function Home() {
 
                 <div className="setting-row">
                   <div>
-                    <div className="setting-title">
-                      Compte connecté
-                    </div>
-
+                    <div className="setting-title">Compte connecté</div>
                     <div className="setting-description">
                       {user.email || "Compte étudiant"}
                     </div>
                   </div>
 
-                  <button
-                    className="secondary-button"
-                    onClick={deconnexion}
-                  >
+                  <button className="secondary-button" onClick={deconnexion}>
                     Déconnexion
                   </button>
                 </div>
@@ -1887,10 +2144,7 @@ export default function Home() {
 
           {action && (
             <div className="result-panel">
-              <strong>
-                Gemini travaille sur ton cours...
-              </strong>
-
+              <strong>Gemini travaille sur ton cours...</strong>
               <p style={{ color: styles.muted, fontSize: 12 }}>
                 La génération peut prendre quelques instants.
               </p>
@@ -1917,4 +2171,4 @@ export default function Home() {
       </div>
     </main>
   );
-    }
+        }
