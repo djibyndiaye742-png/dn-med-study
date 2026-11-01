@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -50,6 +50,13 @@ export default function Home() {
   const [resultatActuel, setResultatActuel] = useState(null);
   const [chargementHistorique, setChargementHistorique] = useState(false);
 
+  const [cours, setCours] = useState([]);
+  const [chargementCours, setChargementCours] = useState(false);
+  const [rechercheCours, setRechercheCours] = useState("");
+  const [filtreUniversite, setFiltreUniversite] = useState("Toutes");
+  const [filtreNiveau, setFiltreNiveau] = useState("Tous");
+  const [filtreMatiere, setFiltreMatiere] = useState("Toutes");
+
   const [theme, setTheme] = useState("light");
   const [couleur, setCouleur] = useState("blue");
 
@@ -97,7 +104,10 @@ export default function Home() {
           setNom(profil.data().prenom || u.displayName || "Étudiant");
         }
 
-        await chargerHistorique(u.uid);
+        await Promise.all([
+          chargerHistorique(u.uid),
+          chargerCours()
+        ]);
       } catch (e) {
         console.error("Erreur de chargement :", e);
       }
@@ -116,16 +126,36 @@ export default function Home() {
       const q = query(ref, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
 
+      setHistorique(
+        snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data()
+        }))
+      );
+    } catch (e) {
+      console.error("Erreur historique :", e);
+    } finally {
+      setChargementHistorique(false);
+    }
+  }
+
+  async function chargerCours() {
+    setChargementCours(true);
+
+    try {
+      const snapshot = await getDocs(collection(db, "cours"));
+
       const elements = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data()
       }));
 
-      setHistorique(elements);
+      setCours(elements);
     } catch (e) {
-      console.error("Erreur historique :", e);
+      console.error("Erreur bibliothèque :", e);
+      setErreur("Impossible de charger la bibliothèque. Vérifie les règles Firestore.");
     } finally {
-      setChargementHistorique(false);
+      setChargementCours(false);
     }
   }
 
@@ -186,7 +216,6 @@ export default function Home() {
         date: new Date().toISOString()
       };
 
-      // Sauvegarde permanente dans Firestore
       const ref = collection(db, "users", user.uid, "resultats");
 
       const docRef = await addDoc(ref, {
@@ -205,14 +234,7 @@ export default function Home() {
         ...ancien
       ]);
 
-      const destinations = {
-        resume: "resume",
-        qcm: "qcm",
-        flashcards: "flashcards",
-        chat: "chat"
-      };
-
-      setSection(destinations[type]);
+      setSection(type);
     } catch (e) {
       console.error(e);
       setErreur(e.message || "Une erreur est survenue.");
@@ -241,6 +263,35 @@ export default function Home() {
     });
   }
 
+  function changerSection(id) {
+    setSection(id);
+    setResultatActuel(null);
+    setMenuOuvert(false);
+    setErreur("");
+  }
+
+  function copierResultat() {
+    if (!resultatActuel?.contenu) return;
+
+    navigator.clipboard.writeText(resultatActuel.contenu);
+    alert("Contenu copié !");
+  }
+
+  function selectionnerCoursBibliotheque(item) {
+    const url =
+      item.url ||
+      item.pdfUrl ||
+      item.fichierUrl ||
+      item.lien;
+
+    if (!url) {
+      setErreur("Ce cours ne possède pas encore de lien PDF.");
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   const compteurs = {
     resume: historique.filter((x) => x.type === "resume").length,
     qcm: historique.filter((x) => x.type === "qcm").length,
@@ -257,19 +308,65 @@ export default function Home() {
     settings: "Paramètres"
   };
 
-  function changerSection(id) {
-    setSection(id);
-    setResultatActuel(null);
-    setMenuOuvert(false);
-    setErreur("");
-  }
+  const contenusSection = historique.filter(
+    (item) => item.type === section
+  );
 
-  function copierResultat() {
-    if (!resultatActuel?.contenu) return;
+  const universites = useMemo(
+    () => [...new Set(cours.map((c) => c.universite || c.university).filter(Boolean))],
+    [cours]
+  );
 
-    navigator.clipboard.writeText(resultatActuel.contenu);
-    alert("Contenu copié !");
-  }
+  const niveaux = useMemo(
+    () => [...new Set(cours.map((c) => c.niveau || c.level).filter(Boolean))],
+    [cours]
+  );
+
+  const matieres = useMemo(
+    () => [...new Set(cours.map((c) => c.matiere || c.subject).filter(Boolean))],
+    [cours]
+  );
+
+  const coursFiltres = useMemo(() => {
+    return cours.filter((c) => {
+      const titre = c.titre || c.title || "";
+      const matiere = c.matiere || c.subject || "";
+      const universite = c.universite || c.university || "";
+      const niveau = c.niveau || c.level || "";
+
+      const recherche = rechercheCours.toLowerCase();
+
+      const correspondRecherche =
+        titre.toLowerCase().includes(recherche) ||
+        matiere.toLowerCase().includes(recherche) ||
+        universite.toLowerCase().includes(recherche);
+
+      const correspondUniversite =
+        filtreUniversite === "Toutes" ||
+        universite === filtreUniversite;
+
+      const correspondNiveau =
+        filtreNiveau === "Tous" ||
+        niveau === filtreNiveau;
+
+      const correspondMatiere =
+        filtreMatiere === "Toutes" ||
+        matiere === filtreMatiere;
+
+      return (
+        correspondRecherche &&
+        correspondUniversite &&
+        correspondNiveau &&
+        correspondMatiere
+      );
+    });
+  }, [
+    cours,
+    rechercheCours,
+    filtreUniversite,
+    filtreNiveau,
+    filtreMatiere
+  ]);
 
   if (chargement) {
     return (
@@ -281,10 +378,6 @@ export default function Home() {
   }
 
   if (!user) return null;
-
-  const contenusSection = historique.filter(
-    (item) => item.type === section
-  );
 
   return (
     <main
@@ -301,7 +394,7 @@ export default function Home() {
       <style jsx global>{`
         * { box-sizing: border-box; }
         body { margin: 0; }
-        button, input, textarea { font: inherit; }
+        button, input, textarea, select { font: inherit; }
         button { cursor: pointer; }
 
         .app-shell {
@@ -343,7 +436,6 @@ export default function Home() {
           color: white;
           font-weight: 900;
           letter-spacing: -1px;
-          box-shadow: 0 7px 18px color-mix(in srgb, var(--primary), transparent 70%);
         }
 
         .brand-name { font-size: 16px; font-weight: 850; }
@@ -354,7 +446,7 @@ export default function Home() {
           font-size: 10px;
           font-weight: 800;
           letter-spacing: 1.4px;
-          padding: 12px 12px;
+          padding: 12px;
           text-transform: uppercase;
         }
 
@@ -372,14 +464,17 @@ export default function Home() {
           font-size: 13px;
           font-weight: 650;
           margin: 3px 0;
-          transition: .2s ease;
         }
 
         .nav-button:hover { background: var(--bg); color: var(--text); }
-        .nav-button.active { background: color-mix(in srgb, var(--primary), transparent 90%); color: var(--primary); }
-        .nav-icon { width: 21px; text-align: center; font-size: 19px; }
+        .nav-button.active {
+          background: color-mix(in srgb, var(--primary), transparent 90%);
+          color: var(--primary);
+        }
 
+        .nav-icon { width: 21px; text-align: center; font-size: 19px; }
         .sidebar-bottom { margin-top: auto; }
+
         .profile-mini {
           display: flex;
           align-items: center;
@@ -404,6 +499,7 @@ export default function Home() {
         .profile-role { font-size: 10px; color: var(--muted); margin-top: 3px; }
 
         .main-area { flex: 1; min-width: 0; }
+
         .topbar {
           height: 76px;
           display: flex;
@@ -419,8 +515,8 @@ export default function Home() {
 
         .top-title { font-size: 15px; font-weight: 800; }
         .top-subtitle { font-size: 11px; color: var(--muted); margin-top: 4px; }
-
         .top-actions { display: flex; gap: 10px; align-items: center; }
+
         .icon-button {
           border: 1px solid var(--border);
           background: var(--surface);
@@ -444,7 +540,6 @@ export default function Home() {
           color: white;
           position: relative;
           overflow: hidden;
-          box-shadow: 0 15px 35px color-mix(in srgb, var(--primary), transparent 78%);
         }
 
         .welcome:after {
@@ -464,8 +559,19 @@ export default function Home() {
           text-transform: uppercase;
         }
 
-        .welcome h1 { font-size: clamp(25px, 3vw, 35px); margin: 13px 0 8px; letter-spacing: -1.2px; }
-        .welcome p { font-size: 13px; opacity: .85; margin: 0; line-height: 1.7; max-width: 520px; }
+        .welcome h1 {
+          font-size: clamp(25px, 3vw, 35px);
+          margin: 13px 0 8px;
+          letter-spacing: -1.2px;
+        }
+
+        .welcome p {
+          font-size: 13px;
+          opacity: .85;
+          margin: 0;
+          line-height: 1.7;
+          max-width: 520px;
+        }
 
         .section-heading {
           display: flex;
@@ -475,7 +581,7 @@ export default function Home() {
           margin: 32px 0 16px;
         }
 
-        .section-heading h2 { font-size: 17px; margin: 0; letter-spacing: -.3px; }
+        .section-heading h2 { font-size: 17px; margin: 0; }
         .section-heading p { font-size: 12px; color: var(--muted); margin: 5px 0 0; }
 
         .stats-grid, .tools-grid {
@@ -484,15 +590,15 @@ export default function Home() {
           gap: 15px;
         }
 
-        .stat-card, .panel, .tool-card, .history-card {
+        .stat-card, .panel, .tool-card, .history-card, .course-card {
           background: var(--surface);
           border: 1px solid var(--border);
           border-radius: 17px;
           padding: 20px;
-          box-shadow: 0 4px 16px #15233b05;
         }
 
         .stat-top { display: flex; justify-content: space-between; align-items: center; }
+
         .stat-icon {
           width: 38px;
           height: 38px;
@@ -509,7 +615,7 @@ export default function Home() {
 
         .tools-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .tool-card { transition: .2s ease; }
-        .tool-card:hover { transform: translateY(-3px); border-color: var(--primary); }
+        .tool-card:hover, .course-card:hover { transform: translateY(-2px); border-color: var(--primary); }
         .tool-card h3 { font-size: 15px; margin: 14px 0 7px; }
         .tool-card p { font-size: 12px; line-height: 1.6; color: var(--muted); margin: 0 0 15px; }
 
@@ -521,11 +627,10 @@ export default function Home() {
           padding: 11px 16px;
           font-size: 12px;
           font-weight: 750;
-          transition: .2s;
         }
 
-        .primary-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
-        .primary-button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+        .primary-button:hover { filter: brightness(1.08); }
+        .primary-button:disabled { opacity: .5; cursor: not-allowed; }
 
         .secondary-button {
           border: 1px solid var(--border);
@@ -546,6 +651,7 @@ export default function Home() {
         }
 
         .upload-box input { max-width: 100%; margin-top: 15px; font-size: 12px; }
+
         .field {
           width: 100%;
           border: 1px solid var(--border);
@@ -560,6 +666,7 @@ export default function Home() {
         textarea.field { min-height: 115px; resize: vertical; }
 
         .history-list { display: grid; gap: 12px; }
+
         .history-card {
           display: flex;
           justify-content: space-between;
@@ -569,7 +676,7 @@ export default function Home() {
           transition: .2s;
         }
 
-        .history-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+        .history-card:hover { border-color: var(--primary); }
         .history-title { font-size: 13px; font-weight: 750; }
         .history-meta { color: var(--muted); font-size: 11px; margin-top: 6px; }
 
@@ -620,6 +727,7 @@ export default function Home() {
         .setting-description { font-size: 11px; color: var(--muted); margin-top: 5px; }
 
         .color-options { display: flex; gap: 10px; flex-wrap: wrap; }
+
         .color-dot {
           width: 29px;
           height: 29px;
@@ -627,6 +735,24 @@ export default function Home() {
           border: 3px solid var(--surface);
           outline: 1px solid var(--border);
         }
+
+        .library-filters {
+          display: grid;
+          grid-template-columns: 2fr 1fr 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 18px;
+        }
+
+        .course-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .course-card { transition: .2s ease; }
+        .course-card h3 { font-size: 14px; margin: 12px 0 8px; }
+        .course-card p { font-size: 11px; color: var(--muted); margin: 5px 0; }
+        .course-card .primary-button { margin-top: 14px; }
 
         .loading-screen {
           min-height: 100vh;
@@ -640,7 +766,6 @@ export default function Home() {
         }
 
         .loading-logo { width: 55px; height: 55px; font-size: 19px; }
-
         .mobile-menu { display: none; }
 
         @media (max-width: 850px) {
@@ -658,12 +783,13 @@ export default function Home() {
           .topbar { padding: 0 18px; height: 67px; }
           .content { padding: 22px 17px; }
           .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .library-filters { grid-template-columns: 1fr 1fr; }
         }
 
         @media (max-width: 560px) {
           .welcome { padding: 25px 21px; }
           .welcome:after { right: 8px; font-size: 115px; }
-          .tools-grid { grid-template-columns: 1fr; }
+          .tools-grid, .course-grid { grid-template-columns: 1fr; }
           .stats-grid { gap: 10px; }
           .stat-card { padding: 15px; }
           .stat-number { font-size: 24px; }
@@ -672,6 +798,7 @@ export default function Home() {
           .top-subtitle { font-size: 10px; }
           .history-card { align-items: flex-start; }
           .setting-row { align-items: flex-start; flex-direction: column; }
+          .library-filters { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -737,9 +864,12 @@ export default function Home() {
             >
               ☰
             </button>
+
             <div>
               <div className="top-title">{titres[section]}</div>
-              <div className="top-subtitle">Ton espace intelligent de médecine</div>
+              <div className="top-subtitle">
+                Ton espace intelligent de médecine
+              </div>
             </div>
           </div>
 
@@ -751,6 +881,7 @@ export default function Home() {
             >
               {sombre ? "☀" : "☾"}
             </button>
+
             <button
               className="icon-button"
               onClick={() => changerSection("settings")}
@@ -762,10 +893,15 @@ export default function Home() {
         </header>
 
         <div className="content">
+
+          {/* TABLEAU DE BORD */}
+
           {section === "dashboard" && (
             <>
               <section className="welcome">
-                <div className="welcome-tag">DN Med Study · Ton espace personnel</div>
+                <div className="welcome-tag">
+                  DN Med Study · Ton espace personnel
+                </div>
                 <h1>Bienvenue, {nom} 👋</h1>
                 <p>
                   Apprends, comprends et révise tes cours de médecine
@@ -863,12 +999,130 @@ export default function Home() {
             </>
           )}
 
+          {/* MES COURS ET BIBLIOTHÈQUE */}
+
           {section === "courses" && (
             <>
               <div className="section-heading">
                 <div>
-                  <h2>Importer un cours</h2>
-                  <p>Sélectionne un PDF pour travailler avec Gemini.</p>
+                  <h2>Bibliothèque des cours</h2>
+                  <p>
+                    Retrouve les cours partagés par les étudiants.
+                  </p>
+                </div>
+
+                <button
+                  className="secondary-button"
+                  onClick={chargerCours}
+                  disabled={chargementCours}
+                >
+                  {chargementCours ? "Actualisation..." : "↻ Actualiser"}
+                </button>
+              </div>
+
+              <div className="library-filters">
+                <input
+                  className="field"
+                  placeholder="Rechercher un cours, une matière..."
+                  value={rechercheCours}
+                  onChange={(e) => setRechercheCours(e.target.value)}
+                />
+
+                <select
+                  className="field"
+                  value={filtreUniversite}
+                  onChange={(e) => setFiltreUniversite(e.target.value)}
+                >
+                  <option value="Toutes">Toutes les universités</option>
+                  {universites.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="field"
+                  value={filtreNiveau}
+                  onChange={(e) => setFiltreNiveau(e.target.value)}
+                >
+                  <option value="Tous">Tous les niveaux</option>
+                  {niveaux.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="field"
+                  value={filtreMatiere}
+                  onChange={(e) => setFiltreMatiere(e.target.value)}
+                >
+                  <option value="Toutes">Toutes les matières</option>
+                  {matieres.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              {chargementCours ? (
+                <div className="empty">Chargement de la bibliothèque...</div>
+              ) : coursFiltres.length === 0 ? (
+                <div className="empty">
+                  <div style={{ fontSize: 30, marginBottom: 12 }}>📚</div>
+                  <strong>Aucun cours trouvé.</strong>
+                  <p>
+                    La bibliothèque est vide ou aucun document ne correspond
+                    à ta recherche.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p style={{ color: styles.muted, fontSize: 12 }}>
+                    {coursFiltres.length} cours disponible(s)
+                  </p>
+
+                  <div className="course-grid">
+                    {coursFiltres.map((item) => (
+                      <div className="course-card" key={item.id}>
+                        <span className="stat-icon">📄</span>
+
+                        <h3>
+                          {item.titre || item.title || "Cours sans titre"}
+                        </h3>
+
+                        <p>
+                          Université : {item.universite || item.university || "Non précisée"}
+                        </p>
+
+                        <p>
+                          Filière : {item.filiere || item.track || "Non précisée"}
+                        </p>
+
+                        <p>
+                          Niveau : {item.niveau || item.level || "Non précisé"}
+                        </p>
+
+                        <p>
+                          Matière : {item.matiere || item.subject || "Non précisée"}
+                        </p>
+
+                        <button
+                          className="primary-button"
+                          onClick={() => selectionnerCoursBibliotheque(item)}
+                        >
+                          Ouvrir le PDF →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="section-heading">
+                <div>
+                  <h2>Importer mon propre cours</h2>
+                  <p>
+                    Sélectionne un PDF depuis ton appareil pour travailler
+                    avec Gemini.
+                  </p>
                 </div>
               </div>
 
@@ -876,8 +1130,10 @@ export default function Home() {
                 <div style={{ fontSize: 34 }}>📄</div>
                 <h3>Ajouter un document PDF</h3>
                 <p style={{ color: styles.muted, fontSize: 12 }}>
-                  Sélectionne un cours depuis ton appareil.
+                  Ce document sera utilisé pour tes résumés, QCM,
+                  flashcards et questions à l'IA.
                 </p>
+
                 <input
                   type="file"
                   accept="application/pdf,.pdf"
@@ -886,6 +1142,7 @@ export default function Home() {
                     setErreur("");
                   }}
                 />
+
                 {fichier && (
                   <p style={{ color: styles.primary, fontSize: 12 }}>
                     Document sélectionné : {fichier.name}
@@ -896,12 +1153,14 @@ export default function Home() {
               <div className="section-heading">
                 <div>
                   <h2>Documents déjà utilisés</h2>
-                  <p>Les documents associés à tes générations précédentes.</p>
+                  <p>Tes documents associés aux générations précédentes.</p>
                 </div>
               </div>
 
               {historique.length === 0 ? (
-                <div className="empty">Aucun document utilisé pour le moment.</div>
+                <div className="empty">
+                  Aucun document utilisé pour le moment.
+                </div>
               ) : (
                 <div className="history-list">
                   {[...new Set(historique.map((x) => x.fichier))]
@@ -909,9 +1168,12 @@ export default function Home() {
                     .map((nomFichier) => (
                       <div className="history-card" key={nomFichier}>
                         <div>
-                          <div className="history-title">📄 {nomFichier}</div>
+                          <div className="history-title">
+                            📄 {nomFichier}
+                          </div>
                           <div className="history-meta">
-                            {historique.filter((x) => x.fichier === nomFichier).length} génération(s) associée(s)
+                            {historique.filter((x) => x.fichier === nomFichier).length}
+                            {" "}génération(s) associée(s)
                           </div>
                         </div>
                       </div>
@@ -920,6 +1182,8 @@ export default function Home() {
               )}
             </>
           )}
+
+          {/* RÉSUMÉS, QCM ET FLASHCARDS */}
 
           {["resume", "qcm", "flashcards"].includes(section) && (
             <>
@@ -930,9 +1194,7 @@ export default function Home() {
                     {section === "qcm" && "Bibliothèque de QCM"}
                     {section === "flashcards" && "Bibliothèque de flashcards"}
                   </h2>
-                  <p>
-                    Tes anciennes créations restent disponibles ici.
-                  </p>
+                  <p>Tes anciennes créations restent disponibles ici.</p>
                 </div>
               </div>
 
@@ -940,6 +1202,7 @@ export default function Home() {
                 <h3 style={{ marginTop: 0, fontSize: 15 }}>
                   Générer un nouveau contenu
                 </h3>
+
                 <p style={{ color: styles.muted, fontSize: 12 }}>
                   {fichier
                     ? `Document sélectionné : ${fichier.name}`
@@ -976,11 +1239,17 @@ export default function Home() {
                       <h2>{resultatActuel.titre}</h2>
                       <p>{resultatActuel.fichier}</p>
                     </div>
-                    <button className="secondary-button" onClick={copierResultat}>
+                    <button
+                      className="secondary-button"
+                      onClick={copierResultat}
+                    >
                       Copier
                     </button>
                   </div>
-                  <div className="result-content">{resultatActuel.contenu}</div>
+
+                  <div className="result-content">
+                    {resultatActuel.contenu}
+                  </div>
                 </div>
               )}
 
@@ -1019,6 +1288,8 @@ export default function Home() {
             </>
           )}
 
+          {/* ASSISTANT IA */}
+
           {section === "chat" && (
             <>
               <div className="section-heading">
@@ -1030,9 +1301,11 @@ export default function Home() {
 
               <div className="panel">
                 <h3 style={{ fontSize: 14 }}>Document de référence</h3>
+
                 <p style={{ fontSize: 12, color: styles.muted }}>
                   {fichier ? fichier.name : "Aucun PDF sélectionné"}
                 </p>
+
                 <button
                   className="secondary-button"
                   onClick={() => changerSection("courses")}
@@ -1041,6 +1314,7 @@ export default function Home() {
                 </button>
 
                 <h3 style={{ fontSize: 14, marginTop: 25 }}>Ta question</h3>
+
                 <textarea
                   className="field"
                   value={question}
@@ -1054,7 +1328,9 @@ export default function Home() {
                   disabled={!!action}
                   onClick={() => analyser("chat")}
                 >
-                  {action === "chat" ? "Réponse en cours..." : "Envoyer ma question"}
+                  {action === "chat"
+                    ? "Réponse en cours..."
+                    : "Envoyer ma question"}
                 </button>
               </div>
 
@@ -1066,6 +1342,7 @@ export default function Home() {
                       <p>Retrouve tes précédentes conversations.</p>
                     </div>
                   </div>
+
                   <div className="history-list">
                     {contenusSection.map((item) => (
                       <div
@@ -1090,9 +1367,16 @@ export default function Home() {
 
               {resultatActuel?.type === "chat" && (
                 <div className="result-panel">
-                  <h2 style={{ fontSize: 16 }}>Réponse de l'assistant</h2>
-                  <div className="result-content">{resultatActuel.contenu}</div>
-                  <button className="secondary-button" onClick={copierResultat}>
+                  <h2 style={{ fontSize: 16 }}>
+                    Réponse de l'assistant
+                  </h2>
+                  <div className="result-content">
+                    {resultatActuel.contenu}
+                  </div>
+                  <button
+                    className="secondary-button"
+                    onClick={copierResultat}
+                  >
                     Copier la réponse
                   </button>
                 </div>
@@ -1100,23 +1384,30 @@ export default function Home() {
             </>
           )}
 
+          {/* PARAMÈTRES */}
+
           {section === "settings" && (
             <>
               <div className="section-heading">
                 <div>
                   <h2>Personnalise ton espace</h2>
-                  <p>Adapte l'apparence de DN Med Study à tes préférences.</p>
+                  <p>
+                    Adapte l'apparence de DN Med Study à tes préférences.
+                  </p>
                 </div>
               </div>
 
               <div className="panel">
                 <div className="setting-row">
                   <div>
-                    <div className="setting-title">Thème de l'application</div>
+                    <div className="setting-title">
+                      Thème de l'application
+                    </div>
                     <div className="setting-description">
                       Choisis entre le mode clair et le mode sombre.
                     </div>
                   </div>
+
                   <button
                     className="secondary-button"
                     onClick={() => setTheme(sombre ? "light" : "dark")}
@@ -1132,6 +1423,7 @@ export default function Home() {
                       Personnalise la couleur de ton interface.
                     </div>
                   </div>
+
                   <div className="color-options">
                     {Object.entries(colors).map(([key, value]) => (
                       <button
@@ -1153,7 +1445,11 @@ export default function Home() {
                       {user.email || "Compte étudiant"}
                     </div>
                   </div>
-                  <button className="secondary-button" onClick={deconnexion}>
+
+                  <button
+                    className="secondary-button"
+                    onClick={deconnexion}
+                  >
                     Déconnexion
                   </button>
                 </div>
@@ -1170,18 +1466,24 @@ export default function Home() {
             </div>
           )}
 
-          {erreur && <div className="error-box">Erreur : {erreur}</div>}
+          {erreur && (
+            <div className="error-box">
+              Erreur : {erreur}
+            </div>
+          )}
 
-          <div style={{
-            textAlign: "center",
-            padding: "35px 10px 15px",
-            color: styles.muted,
-            fontSize: 10
-          }}>
-            DN Med Study · Apprendre, comprendre et progresser.
+          <div
+            style={{
+              textAlign: "center",
+              padding: "35px 10px 15px",
+              color: styles.muted,
+              fontSize: 10
+            }}
+          >
+            DN Med Study · La connaissance au service de la santé.
           </div>
         </div>
       </div>
     </main>
   );
-      }
+                         }
