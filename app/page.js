@@ -11,9 +11,12 @@ import {
   getDocs,
   query,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  deleteDoc
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
+
+const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
 
 const sections = [
   { id: "dashboard", label: "Tableau de bord", icon: "⌂" },
@@ -60,6 +63,22 @@ export default function Home() {
   const [theme, setTheme] = useState("light");
   const [couleur, setCouleur] = useState("blue");
 
+  // Formulaire d'administration
+  const [nouveauCours, setNouveauCours] = useState({
+    titre: "",
+    universite: "UCAD",
+    filiere: "Médecine",
+    niveau: "2e année",
+    matiere: "",
+    url: ""
+  });
+
+  const [publicationCours, setPublicationCours] = useState(false);
+  const [messageAdmin, setMessageAdmin] = useState("");
+
+  const estAdmin =
+    user?.email?.toLowerCase() === ADMIN_EMAIL;
+
   const couleurPrincipale = colors[couleur] || colors.blue;
   const sombre = theme === "dark";
 
@@ -77,7 +96,9 @@ export default function Home() {
     const savedColor = localStorage.getItem("dn-color");
 
     if (savedTheme) setTheme(savedTheme);
-    if (savedColor && colors[savedColor]) setCouleur(savedColor);
+    if (savedColor && colors[savedColor]) {
+      setCouleur(savedColor);
+    }
   }, []);
 
   useEffect(() => {
@@ -101,7 +122,11 @@ export default function Home() {
         const profil = await getDoc(doc(db, "users", u.uid));
 
         if (profil.exists()) {
-          setNom(profil.data().prenom || u.displayName || "Étudiant");
+          setNom(
+            profil.data().prenom ||
+            u.displayName ||
+            "Étudiant"
+          );
         }
 
         await Promise.all([
@@ -122,8 +147,18 @@ export default function Home() {
     setChargementHistorique(true);
 
     try {
-      const ref = collection(db, "users", uid, "resultats");
-      const q = query(ref, orderBy("createdAt", "desc"));
+      const ref = collection(
+        db,
+        "users",
+        uid,
+        "resultats"
+      );
+
+      const q = query(
+        ref,
+        orderBy("createdAt", "desc")
+      );
+
       const snapshot = await getDocs(q);
 
       setHistorique(
@@ -143,7 +178,9 @@ export default function Home() {
     setChargementCours(true);
 
     try {
-      const snapshot = await getDocs(collection(db, "cours"));
+      const snapshot = await getDocs(
+        collection(db, "cours")
+      );
 
       const elements = snapshot.docs.map((d) => ({
         id: d.id,
@@ -151,11 +188,126 @@ export default function Home() {
       }));
 
       setCours(elements);
+      setErreur("");
     } catch (e) {
       console.error("Erreur bibliothèque :", e);
-      setErreur("Impossible de charger la bibliothèque. Vérifie les règles Firestore.");
+      setErreur(
+        "Impossible de charger la bibliothèque. Vérifie les règles Firestore."
+      );
     } finally {
       setChargementCours(false);
+    }
+  }
+
+  // Publication d'un cours par l'administrateur
+  async function publierCours(e) {
+    e.preventDefault();
+    setMessageAdmin("");
+
+    if (!estAdmin) {
+      setMessageAdmin(
+        "Accès réservé à l'administrateur."
+      );
+      return;
+    }
+
+    const {
+      titre,
+      universite,
+      filiere,
+      niveau,
+      matiere,
+      url
+    } = nouveauCours;
+
+    if (
+      !titre.trim() ||
+      !matiere.trim() ||
+      !url.trim()
+    ) {
+      setMessageAdmin(
+        "Remplis le titre, la matière et le lien PDF."
+      );
+      return;
+    }
+
+    try {
+      new URL(url);
+
+      if (!url.startsWith("https://")) {
+        throw new Error("Lien HTTPS obligatoire");
+      }
+    } catch {
+      setMessageAdmin(
+        "Entre un lien PDF valide commençant par https://"
+      );
+      return;
+    }
+
+    setPublicationCours(true);
+
+    try {
+      await addDoc(collection(db, "cours"), {
+        titre: titre.trim(),
+        universite,
+        filiere,
+        niveau,
+        matiere: matiere.trim(),
+        url: url.trim(),
+        createdAt: serverTimestamp(),
+        createdBy: user.uid
+      });
+
+      setNouveauCours({
+        titre: "",
+        universite: "UCAD",
+        filiere: "Médecine",
+        niveau: "2e année",
+        matiere: "",
+        url: ""
+      });
+
+      setMessageAdmin(
+        "Cours publié avec succès. Il est maintenant visible dans la bibliothèque."
+      );
+
+      await chargerCours();
+    } catch (e) {
+      console.error(e);
+
+      setMessageAdmin(
+        "Publication impossible. Vérifie les règles Firestore et le lien."
+      );
+    } finally {
+      setPublicationCours(false);
+    }
+  }
+
+  // Suppression d'un cours par l'administrateur
+  async function supprimerCours(id) {
+    if (
+      !estAdmin ||
+      !window.confirm(
+        "Supprimer définitivement ce cours de la bibliothèque ?"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, "cours", id));
+
+      setCours((ancien) =>
+        ancien.filter((c) => c.id !== id)
+      );
+
+      setMessageAdmin("Cours supprimé.");
+    } catch (e) {
+      console.error(e);
+
+      setMessageAdmin(
+        "Suppression impossible. Vérifie les règles Firestore."
+      );
     }
   }
 
@@ -168,7 +320,9 @@ export default function Home() {
     setErreur("");
 
     if (!fichier) {
-      setErreur("Sélectionne d'abord un cours au format PDF.");
+      setErreur(
+        "Sélectionne d'abord un cours au format PDF."
+      );
       return;
     }
 
@@ -182,6 +336,7 @@ export default function Home() {
 
     try {
       const formData = new FormData();
+
       formData.append("fichier", fichier);
       formData.append("action", type);
 
@@ -197,7 +352,9 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Erreur pendant l'analyse.");
+        throw new Error(
+          data.error || "Erreur pendant l'analyse."
+        );
       }
 
       const titres = {
@@ -216,7 +373,12 @@ export default function Home() {
         date: new Date().toISOString()
       };
 
-      const ref = collection(db, "users", user.uid, "resultats");
+      const ref = collection(
+        db,
+        "users",
+        user.uid,
+        "resultats"
+      );
 
       const docRef = await addDoc(ref, {
         ...nouveauResultat,
@@ -229,6 +391,7 @@ export default function Home() {
       };
 
       setResultatActuel(resultatEnregistre);
+
       setHistorique((ancien) => [
         resultatEnregistre,
         ...ancien
@@ -237,7 +400,9 @@ export default function Home() {
       setSection(type);
     } catch (e) {
       console.error(e);
-      setErreur(e.message || "Une erreur est survenue.");
+      setErreur(
+        e.message || "Une erreur est survenue."
+      );
     } finally {
       setAction("");
     }
@@ -252,9 +417,13 @@ export default function Home() {
   function formatDate(date) {
     if (!date) return "Date inconnue";
 
-    const d = date?.toDate ? date.toDate() : new Date(date);
+    const d = date?.toDate
+      ? date.toDate()
+      : new Date(date);
 
-    if (Number.isNaN(d.getTime())) return "Date inconnue";
+    if (Number.isNaN(d.getTime())) {
+      return "Date inconnue";
+    }
 
     return d.toLocaleDateString("fr-FR", {
       day: "2-digit",
@@ -273,7 +442,10 @@ export default function Home() {
   function copierResultat() {
     if (!resultatActuel?.contenu) return;
 
-    navigator.clipboard.writeText(resultatActuel.contenu);
+    navigator.clipboard.writeText(
+      resultatActuel.contenu
+    );
+
     alert("Contenu copié !");
   }
 
@@ -285,17 +457,31 @@ export default function Home() {
       item.lien;
 
     if (!url) {
-      setErreur("Ce cours ne possède pas encore de lien PDF.");
+      setErreur(
+        "Ce cours ne possède pas encore de lien PDF."
+      );
       return;
     }
 
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(
+      url,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }
 
   const compteurs = {
-    resume: historique.filter((x) => x.type === "resume").length,
-    qcm: historique.filter((x) => x.type === "qcm").length,
-    flashcards: historique.filter((x) => x.type === "flashcards").length
+    resume: historique.filter(
+      (x) => x.type === "resume"
+    ).length,
+
+    qcm: historique.filter(
+      (x) => x.type === "qcm"
+    ).length,
+
+    flashcards: historique.filter(
+      (x) => x.type === "flashcards"
+    ).length
   };
 
   const titres = {
@@ -313,17 +499,35 @@ export default function Home() {
   );
 
   const universites = useMemo(
-    () => [...new Set(cours.map((c) => c.universite || c.university).filter(Boolean))],
+    () => [
+      ...new Set(
+        cours
+          .map((c) => c.universite || c.university)
+          .filter(Boolean)
+      )
+    ],
     [cours]
   );
 
   const niveaux = useMemo(
-    () => [...new Set(cours.map((c) => c.niveau || c.level).filter(Boolean))],
+    () => [
+      ...new Set(
+        cours
+          .map((c) => c.niveau || c.level)
+          .filter(Boolean)
+      )
+    ],
     [cours]
   );
 
   const matieres = useMemo(
-    () => [...new Set(cours.map((c) => c.matiere || c.subject).filter(Boolean))],
+    () => [
+      ...new Set(
+        cours
+          .map((c) => c.matiere || c.subject)
+          .filter(Boolean)
+      )
+    ],
     [cours]
   );
 
@@ -331,10 +535,12 @@ export default function Home() {
     return cours.filter((c) => {
       const titre = c.titre || c.title || "";
       const matiere = c.matiere || c.subject || "";
-      const universite = c.universite || c.university || "";
+      const universite =
+        c.universite || c.university || "";
       const niveau = c.niveau || c.level || "";
 
-      const recherche = rechercheCours.toLowerCase();
+      const recherche =
+        rechercheCours.toLowerCase();
 
       const correspondRecherche =
         titre.toLowerCase().includes(recherche) ||
@@ -379,6 +585,24 @@ export default function Home() {
 
   if (!user) return null;
 
+  const fieldStyle = {
+    width: "100%",
+    padding: 12,
+    border: `1px solid ${styles.border}`,
+    borderRadius: 10,
+    background: styles.surface,
+    color: styles.text,
+    marginBottom: 10
+  };
+
+  const panelStyle = {
+    background: styles.surface,
+    border: `1px solid ${styles.border}`,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20
+  };
+
   return (
     <main
       className="app-shell"
@@ -402,7 +626,7 @@ export default function Home() {
           display: flex;
           background: var(--bg);
           color: var(--text);
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+          font-family: Inter, system-ui, sans-serif;
         }
 
         .sidebar {
@@ -435,12 +659,10 @@ export default function Home() {
           background: var(--primary);
           color: white;
           font-weight: 900;
-          letter-spacing: -1px;
         }
 
         .brand-name { font-size: 16px; font-weight: 850; }
         .brand-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
-
         .nav-label {
           color: var(--muted);
           font-size: 10px;
@@ -466,13 +688,22 @@ export default function Home() {
           margin: 3px 0;
         }
 
-        .nav-button:hover { background: var(--bg); color: var(--text); }
+        .nav-button:hover {
+          background: var(--bg);
+          color: var(--text);
+        }
+
         .nav-button.active {
           background: color-mix(in srgb, var(--primary), transparent 90%);
           color: var(--primary);
         }
 
-        .nav-icon { width: 21px; text-align: center; font-size: 19px; }
+        .nav-icon {
+          width: 21px;
+          text-align: center;
+          font-size: 19px;
+        }
+
         .sidebar-bottom { margin-top: auto; }
 
         .profile-mini {
@@ -497,7 +728,6 @@ export default function Home() {
 
         .profile-name { font-size: 12px; font-weight: 750; }
         .profile-role { font-size: 10px; color: var(--muted); margin-top: 3px; }
-
         .main-area { flex: 1; min-width: 0; }
 
         .topbar {
@@ -542,15 +772,6 @@ export default function Home() {
           overflow: hidden;
         }
 
-        .welcome:after {
-          content: "✚";
-          position: absolute;
-          right: 45px;
-          top: -35px;
-          font-size: 180px;
-          opacity: .09;
-        }
-
         .welcome-tag {
           font-size: 10px;
           letter-spacing: 1.7px;
@@ -562,7 +783,6 @@ export default function Home() {
         .welcome h1 {
           font-size: clamp(25px, 3vw, 35px);
           margin: 13px 0 8px;
-          letter-spacing: -1.2px;
         }
 
         .welcome p {
@@ -597,8 +817,6 @@ export default function Home() {
           padding: 20px;
         }
 
-        .stat-top { display: flex; justify-content: space-between; align-items: center; }
-
         .stat-icon {
           width: 38px;
           height: 38px;
@@ -612,10 +830,13 @@ export default function Home() {
 
         .stat-number { font-size: 28px; font-weight: 850; margin-top: 18px; }
         .stat-label { color: var(--muted); font-size: 12px; margin-top: 4px; }
-
         .tools-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .tool-card { transition: .2s ease; }
-        .tool-card:hover, .course-card:hover { transform: translateY(-2px); border-color: var(--primary); }
+
+        .tool-card:hover, .course-card:hover {
+          transform: translateY(-2px);
+          border-color: var(--primary);
+        }
+
         .tool-card h3 { font-size: 15px; margin: 14px 0 7px; }
         .tool-card p { font-size: 12px; line-height: 1.6; color: var(--muted); margin: 0 0 15px; }
 
@@ -629,7 +850,6 @@ export default function Home() {
           font-weight: 750;
         }
 
-        .primary-button:hover { filter: brightness(1.08); }
         .primary-button:disabled { opacity: .5; cursor: not-allowed; }
 
         .secondary-button {
@@ -664,7 +884,6 @@ export default function Home() {
 
         .field:focus { border-color: var(--primary); }
         textarea.field { min-height: 115px; resize: vertical; }
-
         .history-list { display: grid; gap: 12px; }
 
         .history-card {
@@ -673,10 +892,8 @@ export default function Home() {
           align-items: center;
           gap: 15px;
           cursor: pointer;
-          transition: .2s;
         }
 
-        .history-card:hover { border-color: var(--primary); }
         .history-title { font-size: 13px; font-weight: 750; }
         .history-meta { color: var(--muted); font-size: 11px; margin-top: 6px; }
 
@@ -725,7 +942,6 @@ export default function Home() {
 
         .setting-title { font-size: 13px; font-weight: 750; }
         .setting-description { font-size: 11px; color: var(--muted); margin-top: 5px; }
-
         .color-options { display: flex; gap: 10px; flex-wrap: wrap; }
 
         .color-dot {
@@ -749,7 +965,6 @@ export default function Home() {
           gap: 14px;
         }
 
-        .course-card { transition: .2s ease; }
         .course-card h3 { font-size: 14px; margin: 12px 0 8px; }
         .course-card p { font-size: 11px; color: var(--muted); margin: 5px 0; }
         .course-card .primary-button { margin-top: 14px; }
@@ -788,7 +1003,6 @@ export default function Home() {
 
         @media (max-width: 560px) {
           .welcome { padding: 25px 21px; }
-          .welcome:after { right: 8px; font-size: 115px; }
           .tools-grid, .course-grid { grid-template-columns: 1fr; }
           .stats-grid { gap: 10px; }
           .stat-card { padding: 15px; }
@@ -841,9 +1055,12 @@ export default function Home() {
             <div className="avatar">
               {(nom || "E").charAt(0).toUpperCase()}
             </div>
+
             <div style={{ minWidth: 0 }}>
               <div className="profile-name">{nom}</div>
-              <div className="profile-role">Espace étudiant</div>
+              <div className="profile-role">
+                {estAdmin ? "Administrateur" : "Espace étudiant"}
+              </div>
             </div>
           </div>
 
@@ -902,7 +1119,9 @@ export default function Home() {
                 <div className="welcome-tag">
                   DN Med Study · Ton espace personnel
                 </div>
+
                 <h1>Bienvenue, {nom} 👋</h1>
+
                 <p>
                   Apprends, comprends et révise tes cours de médecine
                   avec ton assistant intelligent.
@@ -923,9 +1142,7 @@ export default function Home() {
                   ["▣", compteurs.flashcards, "Flashcards créées"]
                 ].map(([icon, number, label]) => (
                   <div className="stat-card" key={label}>
-                    <div className="stat-top">
-                      <span className="stat-icon">{icon}</span>
-                    </div>
+                    <span className="stat-icon">{icon}</span>
                     <div className="stat-number">{number}</div>
                     <div className="stat-label">{label}</div>
                   </div>
@@ -965,6 +1182,7 @@ export default function Home() {
                   <h2>Activité récente</h2>
                   <p>Tes dernières générations.</p>
                 </div>
+
                 <button
                   className="secondary-button"
                   onClick={() => changerSection("courses")}
@@ -991,7 +1209,10 @@ export default function Home() {
                           {item.fichier} · {formatDate(item.createdAt || item.date)}
                         </div>
                       </div>
-                      <span style={{ color: styles.primary }}>Ouvrir →</span>
+
+                      <span style={{ color: styles.primary }}>
+                        Ouvrir →
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -999,7 +1220,7 @@ export default function Home() {
             </>
           )}
 
-          {/* MES COURS ET BIBLIOTHÈQUE */}
+          {/* BIBLIOTHÈQUE ET ADMINISTRATION */}
 
           {section === "courses" && (
             <>
@@ -1020,6 +1241,151 @@ export default function Home() {
                 </button>
               </div>
 
+              {/* FORMULAIRE ADMINISTRATEUR */}
+
+              {estAdmin && (
+                <section style={panelStyle}>
+                  <h2 style={{ marginTop: 0, fontSize: 17 }}>
+                    Administration · Ajouter un cours
+                  </h2>
+
+                  <p style={{ color: styles.muted, fontSize: 12 }}>
+                    Ce formulaire publie une fiche et un lien PDF
+                    dans la bibliothèque commune.
+                  </p>
+
+                  <form onSubmit={publierCours}>
+                    <input
+                      style={fieldStyle}
+                      placeholder="Titre du cours"
+                      value={nouveauCours.titre}
+                      onChange={(e) =>
+                        setNouveauCours({
+                          ...nouveauCours,
+                          titre: e.target.value
+                        })
+                      }
+                      required
+                    />
+
+                    <div className="library-filters" style={{ marginBottom: 0 }}>
+                      <select
+                        style={fieldStyle}
+                        value={nouveauCours.universite}
+                        onChange={(e) =>
+                          setNouveauCours({
+                            ...nouveauCours,
+                            universite: e.target.value
+                          })
+                        }
+                      >
+                        <option>UCAD</option>
+                        <option>UGB</option>
+                        <option>UASZ</option>
+                        <option>UADB</option>
+                        <option>Autre</option>
+                      </select>
+
+                      <select
+                        style={fieldStyle}
+                        value={nouveauCours.filiere}
+                        onChange={(e) =>
+                          setNouveauCours({
+                            ...nouveauCours,
+                            filiere: e.target.value
+                          })
+                        }
+                      >
+                        <option>Médecine</option>
+                        <option>Pharmacie</option>
+                        <option>Odontologie</option>
+                        <option>Autre</option>
+                      </select>
+
+                      <select
+                        style={fieldStyle}
+                        value={nouveauCours.niveau}
+                        onChange={(e) =>
+                          setNouveauCours({
+                            ...nouveauCours,
+                            niveau: e.target.value
+                          })
+                        }
+                      >
+                        {[
+                          "1re année",
+                          "2e année",
+                          "3e année",
+                          "4e année",
+                          "5e année",
+                          "6e année",
+                          "7e année",
+                          "Autre"
+                        ].map((n) => (
+                          <option key={n}>{n}</option>
+                        ))}
+                      </select>
+
+                      <input
+                        style={fieldStyle}
+                        placeholder="Matière"
+                        value={nouveauCours.matiere}
+                        onChange={(e) =>
+                          setNouveauCours({
+                            ...nouveauCours,
+                            matiere: e.target.value
+                          })
+                        }
+                        required
+                      />
+                    </div>
+
+                    <input
+                      style={fieldStyle}
+                      type="url"
+                      placeholder="Lien PDF public (https://...)"
+                      value={nouveauCours.url}
+                      onChange={(e) =>
+                        setNouveauCours({
+                          ...nouveauCours,
+                          url: e.target.value
+                        })
+                      }
+                      required
+                    />
+
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={publicationCours}
+                    >
+                      {publicationCours
+                        ? "Publication..."
+                        : "Publier dans la bibliothèque"}
+                    </button>
+                  </form>
+
+                  {messageAdmin && (
+                    <p
+                      role="status"
+                      style={{
+                        fontSize: 12,
+                        marginBottom: 0,
+                        color:
+                          messageAdmin.includes("succès") ||
+                          messageAdmin.includes("supprimé")
+                            ? "#0c9b70"
+                            : "#d97706"
+                      }}
+                    >
+                      {messageAdmin}
+                    </p>
+                  )}
+                </section>
+              )}
+
+              {/* FILTRES */}
+
               <div className="library-filters">
                 <input
                   className="field"
@@ -1035,7 +1401,7 @@ export default function Home() {
                 >
                   <option value="Toutes">Toutes les universités</option>
                   {universites.map((u) => (
-                    <option key={u} value={u}>{u}</option>
+                    <option key={u}>{u}</option>
                   ))}
                 </select>
 
@@ -1046,7 +1412,7 @@ export default function Home() {
                 >
                   <option value="Tous">Tous les niveaux</option>
                   {niveaux.map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n}>{n}</option>
                   ))}
                 </select>
 
@@ -1057,20 +1423,26 @@ export default function Home() {
                 >
                   <option value="Toutes">Toutes les matières</option>
                   {matieres.map((m) => (
-                    <option key={m} value={m}>{m}</option>
+                    <option key={m}>{m}</option>
                   ))}
                 </select>
               </div>
 
               {chargementCours ? (
-                <div className="empty">Chargement de la bibliothèque...</div>
+                <div className="empty">
+                  Chargement de la bibliothèque...
+                </div>
               ) : coursFiltres.length === 0 ? (
                 <div className="empty">
-                  <div style={{ fontSize: 30, marginBottom: 12 }}>📚</div>
+                  <div style={{ fontSize: 30, marginBottom: 12 }}>
+                    📚
+                  </div>
+
                   <strong>Aucun cours trouvé.</strong>
+
                   <p>
-                    La bibliothèque est vide ou aucun document ne correspond
-                    à ta recherche.
+                    La bibliothèque est vide ou aucun document
+                    ne correspond à ta recherche.
                   </p>
                 </div>
               ) : (
@@ -1110,11 +1482,23 @@ export default function Home() {
                         >
                           Ouvrir le PDF →
                         </button>
+
+                        {estAdmin && (
+                          <button
+                            className="secondary-button"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => supprimerCours(item.id)}
+                          >
+                            Supprimer
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 </>
               )}
+
+              {/* IMPORTER UN PDF PERSONNEL */}
 
               <div className="section-heading">
                 <div>
@@ -1129,6 +1513,7 @@ export default function Home() {
               <div className="upload-box">
                 <div style={{ fontSize: 34 }}>📄</div>
                 <h3>Ajouter un document PDF</h3>
+
                 <p style={{ color: styles.muted, fontSize: 12 }}>
                   Ce document sera utilisé pour tes résumés, QCM,
                   flashcards et questions à l'IA.
@@ -1153,7 +1538,9 @@ export default function Home() {
               <div className="section-heading">
                 <div>
                   <h2>Documents déjà utilisés</h2>
-                  <p>Tes documents associés aux générations précédentes.</p>
+                  <p>
+                    Tes documents associés aux générations précédentes.
+                  </p>
                 </div>
               </div>
 
@@ -1171,8 +1558,11 @@ export default function Home() {
                           <div className="history-title">
                             📄 {nomFichier}
                           </div>
+
                           <div className="history-meta">
-                            {historique.filter((x) => x.fichier === nomFichier).length}
+                            {historique.filter(
+                              (x) => x.fichier === nomFichier
+                            ).length}
                             {" "}génération(s) associée(s)
                           </div>
                         </div>
@@ -1194,7 +1584,10 @@ export default function Home() {
                     {section === "qcm" && "Bibliothèque de QCM"}
                     {section === "flashcards" && "Bibliothèque de flashcards"}
                   </h2>
-                  <p>Tes anciennes créations restent disponibles ici.</p>
+
+                  <p>
+                    Tes anciennes créations restent disponibles ici.
+                  </p>
                 </div>
               </div>
 
@@ -1234,11 +1627,15 @@ export default function Home() {
 
               {resultatActuel?.type === section && (
                 <div className="result-panel">
-                  <div className="section-heading" style={{ marginTop: 0 }}>
+                  <div
+                    className="section-heading"
+                    style={{ marginTop: 0 }}
+                  >
                     <div>
                       <h2>{resultatActuel.titre}</h2>
                       <p>{resultatActuel.fichier}</p>
                     </div>
+
                     <button
                       className="secondary-button"
                       onClick={copierResultat}
@@ -1261,7 +1658,9 @@ export default function Home() {
               </div>
 
               {chargementHistorique ? (
-                <div className="empty">Chargement de tes contenus...</div>
+                <div className="empty">
+                  Chargement de tes contenus...
+                </div>
               ) : contenusSection.length === 0 ? (
                 <div className="empty">
                   Aucun contenu enregistré dans cette rubrique.
@@ -1275,12 +1674,18 @@ export default function Home() {
                       onClick={() => ouvrirResultat(item)}
                     >
                       <div>
-                        <div className="history-title">{item.titre}</div>
+                        <div className="history-title">
+                          {item.titre}
+                        </div>
+
                         <div className="history-meta">
                           {item.fichier} · {formatDate(item.createdAt || item.date)}
                         </div>
                       </div>
-                      <span style={{ color: styles.primary }}>Consulter →</span>
+
+                      <span style={{ color: styles.primary }}>
+                        Consulter →
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1295,15 +1700,21 @@ export default function Home() {
               <div className="section-heading">
                 <div>
                   <h2>Ton tuteur médical intelligent</h2>
-                  <p>Pose une question à partir d'un cours PDF.</p>
+                  <p>
+                    Pose une question à partir d'un cours PDF.
+                  </p>
                 </div>
               </div>
 
               <div className="panel">
-                <h3 style={{ fontSize: 14 }}>Document de référence</h3>
+                <h3 style={{ fontSize: 14 }}>
+                  Document de référence
+                </h3>
 
                 <p style={{ fontSize: 12, color: styles.muted }}>
-                  {fichier ? fichier.name : "Aucun PDF sélectionné"}
+                  {fichier
+                    ? fichier.name
+                    : "Aucun PDF sélectionné"}
                 </p>
 
                 <button
@@ -1313,7 +1724,9 @@ export default function Home() {
                   Choisir un PDF
                 </button>
 
-                <h3 style={{ fontSize: 14, marginTop: 25 }}>Ta question</h3>
+                <h3 style={{ fontSize: 14, marginTop: 25 }}>
+                  Ta question
+                </h3>
 
                 <textarea
                   className="field"
@@ -1339,7 +1752,9 @@ export default function Home() {
                   <div className="section-heading">
                     <div>
                       <h2>Anciennes réponses</h2>
-                      <p>Retrouve tes précédentes conversations.</p>
+                      <p>
+                        Retrouve tes précédentes conversations.
+                      </p>
                     </div>
                   </div>
 
@@ -1354,11 +1769,15 @@ export default function Home() {
                           <div className="history-title">
                             {item.question || item.titre}
                           </div>
+
                           <div className="history-meta">
                             {item.fichier} · {formatDate(item.createdAt || item.date)}
                           </div>
                         </div>
-                        <span style={{ color: styles.primary }}>Ouvrir →</span>
+
+                        <span style={{ color: styles.primary }}>
+                          Ouvrir →
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1370,9 +1789,11 @@ export default function Home() {
                   <h2 style={{ fontSize: 16 }}>
                     Réponse de l'assistant
                   </h2>
+
                   <div className="result-content">
                     {resultatActuel.contenu}
                   </div>
+
                   <button
                     className="secondary-button"
                     onClick={copierResultat}
@@ -1403,6 +1824,7 @@ export default function Home() {
                     <div className="setting-title">
                       Thème de l'application
                     </div>
+
                     <div className="setting-description">
                       Choisis entre le mode clair et le mode sombre.
                     </div>
@@ -1418,7 +1840,10 @@ export default function Home() {
 
                 <div className="setting-row">
                   <div>
-                    <div className="setting-title">Couleur principale</div>
+                    <div className="setting-title">
+                      Couleur principale
+                    </div>
+
                     <div className="setting-description">
                       Personnalise la couleur de ton interface.
                     </div>
@@ -1440,7 +1865,10 @@ export default function Home() {
 
                 <div className="setting-row">
                   <div>
-                    <div className="setting-title">Compte connecté</div>
+                    <div className="setting-title">
+                      Compte connecté
+                    </div>
+
                     <div className="setting-description">
                       {user.email || "Compte étudiant"}
                     </div>
@@ -1459,7 +1887,10 @@ export default function Home() {
 
           {action && (
             <div className="result-panel">
-              <strong>Gemini travaille sur ton cours...</strong>
+              <strong>
+                Gemini travaille sur ton cours...
+              </strong>
+
               <p style={{ color: styles.muted, fontSize: 12 }}>
                 La génération peut prendre quelques instants.
               </p>
@@ -1486,4 +1917,4 @@ export default function Home() {
       </div>
     </main>
   );
-                         }
+    }
