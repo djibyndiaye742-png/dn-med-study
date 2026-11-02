@@ -4,10 +4,11 @@ import { firebaseAdminAuth } from "@/lib/firebase-admin";
 
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 
 const BUCKET = "cours-pdf";
-const ADMIN_EMAIL = "djibyndiaye@gmail.com";
+const ADMIN_EMAIL = "djibyndiye@gmail.com";
 
 
 export async function POST(request) {
@@ -15,45 +16,48 @@ try {
 const authorization = request.headers.get("authorization");
 
 
-if (!authorization?.startsWith("Bearer ")) {
+if (!authorization || !authorization.startsWith("Bearer ")) {
   return NextResponse.json(
-    { error: "Authentification requise." },
+    { error: "Connexion requise." },
     { status: 401 }
   );
 }
 
-const token = authorization.slice(7);
-const decoded = await firebaseAdminAuth.verifyIdToken(token);
+const token = authorization.substring(7);
+const user = await firebaseAdminAuth.verifyIdToken(token);
 
-if (
-  !decoded.email ||
-  decoded.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
-) {
+if (!user.email || user.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
   return NextResponse.json(
-    { error: "Seul l'administrateur peut envoyer des PDF." },
+    { error: "Accès réservé à l'administrateur." },
     { status: 403 }
   );
 }
 
-const { fileName, contentType, fileSize } = await request.json();
+const body = await request.json();
+const { fileName, contentType, fileSize } = body;
 
 if (
-  !fileName ||
+  typeof fileName !== "string" ||
+  !fileName.trim() ||
   contentType !== "application/pdf" ||
   !Number.isFinite(fileSize) ||
   fileSize <= 0 ||
   fileSize > 50 * 1024 * 1024
 ) {
   return NextResponse.json(
-    { error: "Fichier PDF invalide ou supérieur à 50 Mo." },
+    { error: "Fichier PDF invalide ou trop volumineux." },
     { status: 400 }
   );
 }
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SECRET_KEY
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseSecret = process.env.SUPABASE_SECRET_KEY;
+
+if (!supabaseUrl || !supabaseSecret) {
+  throw new Error("Configuration Supabase manquante.");
+}
+
+const supabase = createClient(supabaseUrl, supabaseSecret);
 
 const safeName = fileName
   .normalize("NFKD")
@@ -68,9 +72,9 @@ const { data, error } = await supabase.storage
   .createSignedUploadUrl(path);
 
 if (error) {
-  console.error("Supabase upload authorization:", error.message);
+  console.error("Supabase:", error.message);
   return NextResponse.json(
-    { error: "Impossible de préparer l'envoi du PDF." },
+    { error: "Impossible de préparer le transfert." },
     { status: 500 }
   );
 }
@@ -79,17 +83,17 @@ return NextResponse.json({
   success: true,
   path,
   token: data.token,
-  bucket: BUCKET,
+  bucket: BUCKET
 });
 
 
 
 } catch (error) {
-console.error("Upload authorization:", error.message);
+console.error("API upload-pdf:", error);
 
 
 return NextResponse.json(
-  { error: "Erreur lors de la préparation de l'envoi." },
+  { error: "Erreur lors de la préparation du transfert PDF." },
   { status: 500 }
 );
 
