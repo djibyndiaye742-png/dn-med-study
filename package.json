@@ -1,17 +1,22 @@
 {
-  "name": "dn-med-study",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
-  "dependencies": {
-    "firebase": "^12.5.0",
-    "next": "15.5.28",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "lucide-react": "^0.468.0"
-  }
+"name": "dn-med-study",
+"version": "1.0.0",
+"private": true,
+"scripts": {
+"dev": "next dev",
+"build": "next build",
+"start": "next start"
+},
+"dependencies": {
+"@supabase/supabase-js": "^2.81.1",
+"firebase": "^12.5.0",
+"firebase-admin": "^13.5.0",
+"lucide-react": "^0.468.0",
+"next": "15.5.28",
+"react": "19.1.0",
+"react-dom": "19.1.0",
+"server-only": "^0.0.1"
 }
+}
+
+
