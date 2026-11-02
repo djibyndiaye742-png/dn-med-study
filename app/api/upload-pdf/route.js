@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 
 const BUCKET = "cours-pdf";
-const ADMIN_EMAIL = "djibyndiye@gmail.com";
+const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
 
 
 export async function POST(request) {
