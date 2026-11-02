@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 
 const BUCKET = "cours-pdf";
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const ADMIN_EMAIL = "djibyndiaye@gmail.com";
 
 
 export async function POST(request) {
@@ -23,92 +23,73 @@ if (!authorization?.startsWith("Bearer ")) {
 }
 
 const token = authorization.slice(7);
-const decodedToken = await firebaseAdminAuth.verifyIdToken(token);
+const decoded = await firebaseAdminAuth.verifyIdToken(token);
 
-const formData = await request.formData();
-const file = formData.get("fichier");
-
-if (!file || typeof file.arrayBuffer !== "function") {
+if (
+  !decoded.email ||
+  decoded.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
+) {
   return NextResponse.json(
-    { error: "Aucun fichier PDF reçu." },
+    { error: "Seul l'administrateur peut envoyer des PDF." },
+    { status: 403 }
+  );
+}
+
+const { fileName, contentType, fileSize } = await request.json();
+
+if (
+  !fileName ||
+  contentType !== "application/pdf" ||
+  !Number.isFinite(fileSize) ||
+  fileSize <= 0 ||
+  fileSize > 50 * 1024 * 1024
+) {
+  return NextResponse.json(
+    { error: "Fichier PDF invalide ou supérieur à 50 Mo." },
     { status: 400 }
   );
 }
 
-if (file.type !== "application/pdf") {
-  return NextResponse.json(
-    { error: "Seuls les fichiers PDF sont acceptés." },
-    { status: 400 }
-  );
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SECRET_KEY
+);
 
-if (file.size > MAX_FILE_SIZE) {
-  return NextResponse.json(
-    { error: "Le fichier dépasse la limite de 50 Mo." },
-    { status: 413 }
-  );
-}
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const secretKey = process.env.SUPABASE_SECRET_KEY;
-
-if (!supabaseUrl || !secretKey) {
-  throw new Error("Configuration Supabase manquante.");
-}
-
-const supabase = createClient(supabaseUrl, secretKey);
-
-const safeName = file.name
+const safeName = fileName
   .normalize("NFKD")
   .replace(/[\u0300-\u036f]/g, "")
   .replace(/[^a-zA-Z0-9._-]/g, "_")
   .slice(-120);
 
-const filePath = `${decodedToken.uid}/${Date.now()}_${safeName}`;
+const path = `cours/${Date.now()}_${crypto.randomUUID()}_${safeName}`;
 
-const { error: uploadError } = await supabase.storage
+const { data, error } = await supabase.storage
   .from(BUCKET)
-  .upload(filePath, await file.arrayBuffer(), {
-    contentType: "application/pdf",
-    upsert: false,
-  });
+  .createSignedUploadUrl(path);
 
-if (uploadError) {
-  console.error("Supabase upload:", uploadError.message);
+if (error) {
+  console.error("Supabase upload authorization:", error.message);
   return NextResponse.json(
-    { error: "Échec de l'envoi du PDF." },
-    { status: 500 }
-  );
-}
-
-const { data, error: signedUrlError } = await supabase.storage
-  .from(BUCKET)
-  .createSignedUrl(filePath, 3600);
-
-if (signedUrlError) {
-  console.error("Signed URL:", signedUrlError.message);
-  return NextResponse.json(
-    { error: "PDF envoyé, mais lien temporaire indisponible." },
+    { error: "Impossible de préparer l'envoi du PDF." },
     { status: 500 }
   );
 }
 
 return NextResponse.json({
   success: true,
-  path: filePath,
+  path,
+  token: data.token,
   bucket: BUCKET,
-  signedUrl: data.signedUrl,
-  fileName: file.name,
 });
 
 
 
 } catch (error) {
-console.error("Upload PDF:", error.message);
+console.error("Upload authorization:", error.message);
 
 
 return NextResponse.json(
-  { error: "Impossible d'envoyer le PDF. Vérifie ta connexion." },
+  { error: "Erreur lors de la préparation de l'envoi." },
   { status: 500 }
 );
 
