@@ -53,11 +53,19 @@ const TOOLS = [
 ];
 
 function normalize(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function getCourseUrl(item) {
-  return item.url || item.pdfUrl || item.fichierUrl || item.lien || "";
+  return (
+    item?.url ||
+    item?.pdf_url ||
+    item?.pdfUrl ||
+    item?.fichierUrl ||
+    item?.fichier_url ||
+    item?.lien ||
+    ""
+  );
 }
 
 function formatDate(value) {
@@ -282,41 +290,54 @@ export default function HomePage() {
     let mounted = true;
 
     async function verifierSession() {
-      const {
-        data: { session },
-        error
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+          error
+        } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error("Erreur session :", error);
-      }
+        if (error) throw error;
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (!session?.user) {
-        window.location.href = "/connexion";
-        return;
-      }
+        if (!session?.user) {
+          window.location.href = "/connexion";
+          return;
+        }
 
-      setUser(session.user);
+        setUser(session.user);
 
-      const { data: profileData, error: profileError } =
-        await supabase
+        const {
+          data: profileData,
+          error: profileError
+        } = await supabase
           .from("users")
           .select("*")
           .eq("id", session.user.id)
           .maybeSingle();
 
-      if (profileError) {
-        console.error("Erreur profil :", profileError);
-      }
+        if (profileError) {
+          console.error("Erreur profil :", profileError);
+        }
 
-      if (mounted && profileData) {
-        setProfile(profileData);
-      }
+        if (!mounted) return;
 
-      if (mounted) {
+        if (profileData) {
+          setProfile(profileData);
+        }
+
         setLoading(false);
+
+      } catch (error) {
+        console.error("Erreur authentification :", error);
+
+        if (mounted) {
+          setLoading(false);
+          alert(
+            error.message ||
+            "Impossible de vérifier ta session."
+          );
+        }
       }
     }
 
@@ -349,15 +370,20 @@ export default function HomePage() {
         subjectResponse,
         examResponse
       ] = await Promise.all([
-        supabase.from("cours").select("*").order("created_at", {
-          ascending: false
-        }),
-        supabase.from("matieres").select("*").order("created_at", {
-          ascending: false
-        }),
-        supabase.from("examens").select("*").order("created_at", {
-          ascending: false
-        })
+        supabase
+          .from("cours")
+          .select("*")
+          .order("created_at", { ascending: false }),
+
+        supabase
+          .from("matieres")
+          .select("*")
+          .order("created_at", { ascending: false }),
+
+        supabase
+          .from("examens")
+          .select("*")
+          .order("created_at", { ascending: false })
       ]);
 
       if (courseResponse.error) throw courseResponse.error;
@@ -381,12 +407,14 @@ export default function HomePage() {
       );
 
       if (user?.id) {
-        const { data: historyData, error: historyError } =
-          await supabase
-            .from("resultats")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false });
+        const {
+          data: historyData,
+          error: historyError
+        } = await supabase
+          .from("resultats")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
 
         if (historyError) throw historyError;
 
@@ -397,6 +425,7 @@ export default function HomePage() {
           }))
         );
       }
+
     } catch (error) {
       console.error("Chargement Supabase :", error);
 
@@ -535,6 +564,7 @@ export default function HomePage() {
       await chargerDonnees();
 
       alert("Matière enregistrée avec succès.");
+
     } catch (error) {
       console.error(error);
 
@@ -543,6 +573,7 @@ export default function HomePage() {
           error.message || "Erreur Supabase"
         }`
       );
+
     } finally {
       setBusy(false);
     }
@@ -551,6 +582,18 @@ export default function HomePage() {
   /* ENVOI PDF VERS SUPABASE STORAGE */
 
   async function envoyerPDF(file) {
+    if (!file || !user?.id) {
+      throw new Error("Fichier ou utilisateur manquant.");
+    }
+
+    const isPdf =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+
+    if (!isPdf) {
+      throw new Error("Le fichier doit être au format PDF.");
+    }
+
     setUploading(true);
     setUploadProgress(0);
 
@@ -578,7 +621,12 @@ export default function HomePage() {
         .from(STORAGE_BUCKET)
         .getPublicUrl(filePath);
 
+      if (!data?.publicUrl) {
+        throw new Error("Impossible de récupérer le lien PDF.");
+      }
+
       return data.publicUrl;
+
     } finally {
       setUploading(false);
     }
@@ -661,14 +709,17 @@ export default function HomePage() {
       await chargerDonnees();
 
       alert("Leçon publiée avec succès.");
+
     } catch (error) {
       console.error("Erreur publication PDF :", error);
 
       alert(
         `Publication refusée : ${
-          error.message || "Vérifie Supabase Storage et les politiques RLS."
+          error.message ||
+          "Vérifie Supabase Storage et les politiques RLS."
         }`
       );
+
     } finally {
       setBusy(false);
       setUploading(false);
@@ -737,6 +788,7 @@ export default function HomePage() {
       await chargerDonnees();
 
       alert("Examen publié avec succès.");
+
     } catch (error) {
       console.error(error);
 
@@ -745,6 +797,7 @@ export default function HomePage() {
           error.message || "Erreur Supabase"
         }`
       );
+
     } finally {
       setBusy(false);
     }
@@ -754,6 +807,16 @@ export default function HomePage() {
 
   async function supprimerElement(table, id) {
     if (!isAdmin) return;
+
+    const tablesAutorisees = [
+      "cours",
+      "matieres",
+      "examens"
+    ];
+
+    if (!tablesAutorisees.includes(table)) {
+      return alert("Table non autorisée.");
+    }
 
     if (!confirm("Confirmer la suppression ?")) return;
 
@@ -766,6 +829,7 @@ export default function HomePage() {
       if (error) throw error;
 
       await chargerDonnees();
+
     } catch (error) {
       console.error(error);
 
@@ -846,6 +910,7 @@ export default function HomePage() {
 
         await chargerDonnees();
       }
+
     } catch (error) {
       console.error(error);
 
@@ -853,6 +918,7 @@ export default function HomePage() {
         error.message ||
         "Erreur pendant la préparation du contenu."
       );
+
     } finally {
       setBusy(false);
     }
@@ -877,7 +943,14 @@ export default function HomePage() {
   /* DÉCONNEXION */
 
   async function deconnexion() {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error("Erreur déconnexion :", error);
+      alert("Impossible de se déconnecter.");
+      return;
+    }
+
     window.location.href = "/connexion";
   }
 
@@ -3406,4 +3479,6 @@ export default function HomePage() {
       `}</style>
     </main>
   );
-}
+        }
+
+
