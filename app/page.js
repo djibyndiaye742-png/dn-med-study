@@ -24,7 +24,7 @@ import {
 } from "firebase/storage";
 
 const storage = getStorage(auth.app);
-const ADMIN_EMAIL = "djibyndiaye@gmail.com";
+const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
 
 const NAVIGATION = [
   { id: "home", label: "Accueil", icon: Home },
