@@ -18,12 +18,13 @@ import {
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
+
 import {
   getStorage, ref, uploadBytesResumable, getDownloadURL
 } from "firebase/storage";
 
 const storage = getStorage(auth.app);
-const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
+const ADMIN_EMAIL = "djibyndiaye@gmail.com";
 
 const NAVIGATION = [
   { id: "home", label: "Accueil", icon: Home },
@@ -70,7 +71,9 @@ function getCourseUrl(item) {
 
 function formatDate(value) {
   if (!value) return "Date inconnue";
+
   const date = value?.toDate ? value.toDate() : new Date(value);
+
   if (Number.isNaN(date.getTime())) return "Date inconnue";
 
   return date.toLocaleDateString("fr-FR", {
@@ -80,8 +83,9 @@ function formatDate(value) {
   });
 }
 
-/* COMPOSANTS PLACÉS HORS DE HOMEPAGE
-   Cela évite la perte de focus et la fermeture du clavier. */
+/* COMPOSANTS HORS DE HOMEPAGE
+   Leur position évite de recréer les champs à chaque frappe
+   et de faire disparaître le clavier du téléphone. */
 
 function IconTile({ icon: Icon, color, background, size = 27 }) {
   return (
@@ -104,7 +108,11 @@ function SectionTitle({ eyebrow, title, description, action }) {
   );
 }
 
-function EmptyState({ icon: Icon = FolderOpen, title, description }) {
+function EmptyState({
+  icon: Icon = FolderOpen,
+  title,
+  description
+}) {
   return (
     <div className="empty-state">
       <div className="empty-icon"><Icon size={35} /></div>
@@ -115,8 +123,12 @@ function EmptyState({ icon: Icon = FolderOpen, title, description }) {
 }
 
 function Field({
-  label, value, onChange, placeholder,
-  type = "text", required = false
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  required = false
 }) {
   return (
     <label className="field">
@@ -144,6 +156,7 @@ function SelectField({ label, value, onChange, options }) {
         {options.map((option, index) => {
           const optionValue =
             typeof option === "string" ? option : option.value;
+
           const optionLabel =
             typeof option === "string" ? option : option.label;
 
@@ -263,28 +276,31 @@ export default function HomePage() {
   /* AUTHENTIFICATION */
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async currentUser => {
-      if (!currentUser) {
-        window.location.href = "/connexion";
-        return;
-      }
-
-      setUser(currentUser);
-
-      try {
-        const profileSnap = await getDoc(
-          doc(db, "users", currentUser.uid)
-        );
-
-        if (profileSnap.exists()) {
-          setProfile(profileSnap.data());
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async currentUser => {
+        if (!currentUser) {
+          window.location.href = "/connexion";
+          return;
         }
-      } catch (error) {
-        console.error("Erreur profil :", error);
-      }
 
-      setLoading(false);
-    });
+        setUser(currentUser);
+
+        try {
+          const profileSnap = await getDoc(
+            doc(db, "users", currentUser.uid)
+          );
+
+          if (profileSnap.exists()) {
+            setProfile(profileSnap.data());
+          }
+        } catch (error) {
+          console.error("Erreur profil :", error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
 
     return () => unsubscribe();
   }, []);
@@ -293,26 +309,33 @@ export default function HomePage() {
 
   async function chargerDonnees() {
     try {
-      const [courseSnap, subjectSnap, examSnap] = await Promise.all([
-        getDocs(collection(db, "cours")),
-        getDocs(collection(db, "matieres")),
-        getDocs(collection(db, "examens"))
-      ]);
+      const [courseSnap, subjectSnap, examSnap] =
+        await Promise.all([
+          getDocs(collection(db, "cours")),
+          getDocs(collection(db, "matieres")),
+          getDocs(collection(db, "examens"))
+        ]);
 
-      setCourses(courseSnap.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      })));
+      setCourses(
+        courseSnap.docs.map(item => ({
+          id: item.id,
+          ...item.data()
+        }))
+      );
 
-      setSubjects(subjectSnap.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      })));
+      setSubjects(
+        subjectSnap.docs.map(item => ({
+          id: item.id,
+          ...item.data()
+        }))
+      );
 
-      setExams(examSnap.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      })));
+      setExams(
+        examSnap.docs.map(item => ({
+          id: item.id,
+          ...item.data()
+        }))
+      );
 
       if (user?.uid) {
         const historyQuery = query(
@@ -322,13 +345,16 @@ export default function HomePage() {
 
         const historySnap = await getDocs(historyQuery);
 
-        setHistory(historySnap.docs.map(item => ({
-          id: item.id,
-          ...item.data()
-        })));
+        setHistory(
+          historySnap.docs.map(item => ({
+            id: item.id,
+            ...item.data()
+          }))
+        );
       }
     } catch (error) {
       console.error("Chargement Firebase :", error);
+
       alert(
         "Impossible de charger certaines données : " +
         (error.message || "Erreur Firebase")
@@ -337,7 +363,9 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    if (user?.uid) chargerDonnees();
+    if (user?.uid) {
+      chargerDonnees();
+    }
   }, [user?.uid]);
 
   /* FILTRES */
@@ -374,15 +402,22 @@ export default function HomePage() {
         (course.niveau || course.level) === filterLevel;
 
       const matchesSemester =
-        !filterSemester || course.semestre === filterSemester;
+        !filterSemester ||
+        course.semestre === filterSemester;
 
-      return matchesSearch &&
+      return (
+        matchesSearch &&
         matchesUniversity &&
         matchesLevel &&
-        matchesSemester;
+        matchesSemester
+      );
     });
   }, [
-    courses, search, filterUniversity, filterLevel, filterSemester
+    courses,
+    search,
+    filterUniversity,
+    filterLevel,
+    filterSemester
   ]);
 
   const filteredExams = useMemo(() => {
@@ -393,13 +428,20 @@ export default function HomePage() {
         (!text ||
           normalize(exam.titre).includes(text) ||
           normalize(exam.matiere).includes(text)) &&
-        (!filterUniversity || exam.universite === filterUniversity) &&
-        (!filterLevel || exam.niveau === filterLevel) &&
-        (!filterSemester || exam.semestre === filterSemester)
+        (!filterUniversity ||
+          exam.universite === filterUniversity) &&
+        (!filterLevel ||
+          exam.niveau === filterLevel) &&
+        (!filterSemester ||
+          exam.semestre === filterSemester)
       );
     });
   }, [
-    exams, search, filterUniversity, filterLevel, filterSemester
+    exams,
+    search,
+    filterUniversity,
+    filterLevel,
+    filterSemester
   ]);
 
   /* NAVIGATION */
@@ -418,13 +460,13 @@ export default function HomePage() {
 
     if (!isAdmin) return;
 
-    if (
-      !subjectForm.universite ||
-      !subjectForm.filiere ||
-      !subjectForm.niveau ||
-      !subjectForm.semestre ||
-      !subjectForm.nom.trim()
-    ) {
+    const universite = subjectForm.universite.trim();
+    const filiere = subjectForm.filiere.trim();
+    const niveau = subjectForm.niveau.trim();
+    const semestre = subjectForm.semestre.trim();
+    const nom = subjectForm.nom.trim();
+
+    if (!universite || !filiere || !niveau || !semestre || !nom) {
       return alert("Complète tous les champs.");
     }
 
@@ -432,8 +474,11 @@ export default function HomePage() {
 
     try {
       await addDoc(collection(db, "matieres"), {
-        ...subjectForm,
-        nom: subjectForm.nom.trim(),
+        universite,
+        filiere,
+        niveau,
+        semestre,
+        nom,
         createdAt: serverTimestamp(),
         createdBy: user.uid
       });
@@ -447,10 +492,13 @@ export default function HomePage() {
       });
 
       setModal("");
+
       await chargerDonnees();
+
       alert("Matière enregistrée avec succès.");
     } catch (error) {
-      console.error(error);
+      console.error("Erreur ajout matière :", error);
+
       alert(
         `Enregistrement refusé : ${error.code || "erreur"} — ${
           error.message || "Vérifie les règles Firestore."
@@ -465,22 +513,25 @@ export default function HomePage() {
 
   function envoyerPDF(file, fileRef) {
     return new Promise((resolve, reject) => {
+      setUploading(true);
+      setUploadProgress(0);
+
       const uploadTask = uploadBytesResumable(
         fileRef,
         file,
         { contentType: "application/pdf" }
       );
 
-      setUploading(true);
-      setUploadProgress(0);
-
       uploadTask.on(
         "state_changed",
         snapshot => {
-          const progress = Math.round(
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-          );
-          setUploadProgress(progress);
+          if (snapshot.totalBytes > 0) {
+            const progress = Math.round(
+              (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+            );
+
+            setUploadProgress(progress);
+          }
         },
         error => {
           setUploading(false);
@@ -488,9 +539,12 @@ export default function HomePage() {
         },
         async () => {
           try {
-            const url = await getDownloadURL(uploadTask.snapshot.ref);
-            setUploading(false);
+            const url = await getDownloadURL(
+              uploadTask.snapshot.ref
+            );
+
             setUploadProgress(100);
+            setUploading(false);
             resolve(url);
           } catch (error) {
             setUploading(false);
@@ -512,13 +566,18 @@ export default function HomePage() {
       s => s.id === courseForm.matiereId
     );
 
-    if (!subject) return alert("Sélectionne une matière.");
+    if (!subject) {
+      return alert("Sélectionne une matière.");
+    }
 
-    if (!courseForm.titre.trim()) {
+    const titre = courseForm.titre.trim();
+    const lienExterne = courseForm.url.trim();
+
+    if (!titre) {
       return alert("Ajoute le titre de la leçon.");
     }
 
-    if (!lessonFile && !courseForm.url.trim()) {
+    if (!lessonFile && !lienExterne) {
       return alert("Choisis un PDF ou ajoute un lien PDF.");
     }
 
@@ -527,14 +586,22 @@ export default function HomePage() {
         lessonFile.type === "application/pdf" ||
         lessonFile.name.toLowerCase().endsWith(".pdf");
 
-      if (!isPdf) return alert("Le fichier doit être au format PDF.");
+      if (!isPdf) {
+        return alert("Le fichier doit être au format PDF.");
+      }
+
+      const maxSize = 50 * 1024 * 1024;
+
+      if (lessonFile.size > maxSize) {
+        return alert("Le PDF ne doit pas dépasser 50 Mo.");
+      }
     }
 
     setBusy(true);
     setUploadProgress(0);
 
     try {
-      let pdfUrl = courseForm.url.trim();
+      let pdfUrl = lienExterne;
 
       if (lessonFile) {
         const safeName = lessonFile.name.replace(
@@ -551,13 +618,13 @@ export default function HomePage() {
       }
 
       const payload = {
-        titre: courseForm.titre.trim(),
+        titre,
         matiere: subject.nom,
         matiereId: subject.id,
-        universite: subject.universite,
-        filiere: subject.filiere,
-        niveau: subject.niveau,
-        semestre: subject.semestre,
+        universite: subject.universite || "",
+        filiere: subject.filiere || "",
+        niveau: subject.niveau || "",
+        semestre: subject.semestre || "",
         description: courseForm.description.trim(),
         url: pdfUrl,
         pdfUrl,
@@ -579,9 +646,11 @@ export default function HomePage() {
       setModal("");
 
       await chargerDonnees();
+
       alert("Leçon publiée avec succès.");
     } catch (error) {
       console.error("Erreur publication PDF :", error);
+
       alert(
         `Publication refusée : ${error.code || "erreur"} — ${
           error.message || "Vérifie Firebase Storage et les règles."
@@ -600,19 +669,28 @@ export default function HomePage() {
 
     if (!isAdmin) return;
 
-    if (!examForm.titre || !examForm.matiere || !examForm.url) {
-      return alert("Le titre, la matière et le lien du sujet sont obligatoires.");
+    const titre = examForm.titre.trim();
+    const matiere = examForm.matiere.trim();
+    const url = examForm.url.trim();
+    const correctionUrl = examForm.correctionUrl.trim();
+
+    if (!titre || !matiere || !url) {
+      return alert(
+        "Le titre, la matière et le lien du sujet sont obligatoires."
+      );
     }
 
-    if (!examForm.url.startsWith("https://")) {
+    if (!url.startsWith("https://")) {
       return alert("Le lien du sujet doit commencer par https://");
     }
 
     if (
-      examForm.correctionUrl &&
-      !examForm.correctionUrl.startsWith("https://")
+      correctionUrl &&
+      !correctionUrl.startsWith("https://")
     ) {
-      return alert("Le lien de correction doit commencer par https://");
+      return alert(
+        "Le lien de correction doit commencer par https://"
+      );
     }
 
     setBusy(true);
@@ -620,6 +698,10 @@ export default function HomePage() {
     try {
       await addDoc(collection(db, "examens"), {
         ...examForm,
+        titre,
+        matiere,
+        url,
+        correctionUrl,
         createdAt: serverTimestamp(),
         createdBy: user.uid
       });
@@ -637,10 +719,13 @@ export default function HomePage() {
       });
 
       setModal("");
+
       await chargerDonnees();
+
       alert("Examen publié avec succès.");
     } catch (error) {
-      console.error(error);
+      console.error("Erreur ajout examen :", error);
+
       alert(
         `Enregistrement refusé : ${error.code || "erreur"} — ${
           error.message || "Vérifie les règles Firebase."
@@ -655,14 +740,17 @@ export default function HomePage() {
 
   async function supprimerElement(collectionName, id) {
     if (!isAdmin) return;
+
     if (!confirm("Confirmer la suppression ?")) return;
 
     try {
       await deleteDoc(doc(db, collectionName, id));
       await chargerDonnees();
     } catch (error) {
-      console.error(error);
-      alert("Suppression impossible. Vérifie les règles Firebase.");
+      console.error("Erreur suppression :", error);
+      alert(
+        "Suppression impossible. Vérifie les règles Firebase."
+      );
     }
   }
 
@@ -671,7 +759,9 @@ export default function HomePage() {
   function ouvrirCours(course) {
     const url = getCourseUrl(course);
 
-    if (!url) return alert("Aucun document disponible.");
+    if (!url) {
+      return alert("Aucun document disponible.");
+    }
 
     window.open(url, "_blank", "noopener,noreferrer");
   }
@@ -681,13 +771,16 @@ export default function HomePage() {
   async function lancerIA(e) {
     e.preventDefault();
 
-    if (!aiFile) return alert("Sélectionne un fichier PDF.");
+    if (!aiFile) {
+      return alert("Sélectionne un fichier PDF.");
+    }
 
     setBusy(true);
     setAiResult("");
 
     try {
       const formData = new FormData();
+
       formData.append("fichier", aiFile);
       formData.append("action", aiAction);
 
@@ -703,7 +796,9 @@ export default function HomePage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Erreur pendant l'analyse.");
+        throw new Error(
+          data.error || "Erreur pendant l'analyse."
+        );
       }
 
       const result =
@@ -730,8 +825,11 @@ export default function HomePage() {
         await chargerDonnees();
       }
     } catch (error) {
-      console.error(error);
-      alert(error.message || "Erreur pendant la préparation du contenu.");
+      console.error("Erreur assistant IA :", error);
+      alert(
+        error.message ||
+        "Erreur pendant la préparation du contenu."
+      );
     } finally {
       setBusy(false);
     }
@@ -756,8 +854,13 @@ export default function HomePage() {
   /* DÉCONNEXION */
 
   async function deconnexion() {
-    await signOut(auth);
-    window.location.href = "/connexion";
+    try {
+      await signOut(auth);
+      window.location.href = "/connexion";
+    } catch (error) {
+      console.error("Erreur déconnexion :", error);
+      alert("La déconnexion a échoué.");
+    }
   }
 
   if (loading) {
@@ -769,7 +872,8 @@ export default function HomePage() {
       </div>
     );
   }
-    const actionLabels = {
+
+  const actionLabels = {
     resume: "Préparation du résumé...",
     qcm: "Préparation des QCM...",
     flashcards: "Création des flashcards...",
@@ -777,9 +881,12 @@ export default function HomePage() {
   };
 
   const availableSubjects = subjects.filter(subject =>
-    (!filterUniversity || subject.universite === filterUniversity) &&
-    (!filterLevel || subject.niveau === filterLevel) &&
-    (!filterSemester || subject.semestre === filterSemester)
+    (!filterUniversity ||
+      subject.universite === filterUniversity) &&
+    (!filterLevel ||
+      subject.niveau === filterLevel) &&
+    (!filterSemester ||
+      subject.semestre === filterSemester)
   );
 
   const visibleCourses = selectedSubject
@@ -792,45 +899,76 @@ export default function HomePage() {
   const pageTitle =
     NAVIGATION.find(item => item.id === active)?.label ||
     (active === "admin" ? "Administration" : "Paramètres");
-
-  return (
-    <main className={`app-shell ${dark ? "dark-mode" : ""}`}>
+    return (
+    <main className={dark ? "app dark-mode" : "app"}>
+      {/* BARRE LATÉRALE DESKTOP */}
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">DN</div>
           <div>
             <strong>DN MED STUDY</strong>
-            <span>Plateforme médicale</span>
+            <small>Plateforme médicale</small>
           </div>
         </div>
 
-        <div className="sidebar-label">MENU PRINCIPAL</div>
+        <div className="sidebar-section-label">MENU PRINCIPAL</div>
 
-        <nav className="side-navigation">
-          {NAVIGATION.map(item => (
-            <button
-              key={item.id}
-              className={active === item.id ? "nav-item active" : "nav-item"}
-              onClick={() => navigate(item.id)}
-            >
-              <item.icon size={19} />
-              <span>{item.label}</span>
-            </button>
-          ))}
+        <nav className="sidebar-nav">
+          {NAVIGATION.map(item => {
+            const Icon = item.icon;
 
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={active === item.id ? "nav-item active" : "nav-item"}
+                onClick={() => navigate(item.id)}
+              >
+                <Icon size={19} />
+                <span>{item.label}</span>
+                {active === item.id && <ChevronRight size={17} />}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="sidebar-section-label">OUTILS DE RÉVISION</div>
+
+        <div className="sidebar-tools">
+          {TOOLS.map(tool => {
+            const Icon = tool.icon;
+
+            return (
+              <button
+                key={tool.id}
+                type="button"
+                className={active === tool.id ? "tool-nav active" : "tool-nav"}
+                onClick={() => {
+                  setActive("ai");
+                  setAiAction(tool.id);
+                }}
+              >
+                <Icon size={18} />
+                <span>{tool.title}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="sidebar-bottom">
           {isAdmin && (
             <button
-              className={active === "admin" ? "nav-item active" : "nav-item"}
+              type="button"
+              className="nav-item"
               onClick={() => navigate("admin")}
             >
               <ShieldCheck size={19} />
               <span>Administration</span>
             </button>
           )}
-        </nav>
 
-        <div className="sidebar-bottom">
           <button
+            type="button"
             className={active === "settings" ? "nav-item active" : "nav-item"}
             onClick={() => navigate("settings")}
           >
@@ -838,368 +976,565 @@ export default function HomePage() {
             <span>Paramètres</span>
           </button>
 
-          <div className="sidebar-profile">
-            <div className="avatar">
-              {displayName.charAt(0).toUpperCase()}
+          <div className="user-card">
+            <div className="user-avatar">
+              {displayName.slice(0, 1).toUpperCase()}
             </div>
-            <div>
+            <div className="user-info">
               <strong>{displayName}</strong>
-              <span>{isAdmin ? "Administrateur" : "Étudiant"}</span>
+              <small>{isAdmin ? "Administrateur" : "Étudiant"}</small>
             </div>
+            <button
+              type="button"
+              className="logout-button"
+              title="Déconnexion"
+              onClick={deconnexion}
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </div>
       </aside>
 
+      {/* CONTENU PRINCIPAL */}
       <section className="main-area">
         <header className="topbar">
-          <button
-            className="mobile-menu-button"
-            onClick={() => setMobileMenu(!mobileMenu)}
-          >
-            <Menu size={23} />
-          </button>
+          <div className="topbar-left">
+            <button
+              type="button"
+              className="mobile-menu-button"
+              onClick={() => setMobileMenu(!mobileMenu)}
+              aria-label="Ouvrir le menu"
+            >
+              {mobileMenu ? <X size={23} /> : <Menu size={23} />}
+            </button>
 
-          <div className="topbar-title">
-            <span>DN MED STUDY</span>
-            <strong>{pageTitle}</strong>
+            <div className="breadcrumb">
+              <span>DN MED STUDY</span>
+              <ChevronRight size={15} />
+              <strong>{pageTitle}</strong>
+            </div>
           </div>
 
           <div className="topbar-right">
-            <button
-              className="icon-button"
-              onClick={() => setDark(!dark)}
-              title="Changer le thème"
-            >
-              {dark ? <Eye size={19} /> : <Settings size={19} />}
-            </button>
+            <span className="topbar-user">{displayName}</span>
             <div className="topbar-avatar">
-              {displayName.charAt(0).toUpperCase()}
+              {displayName.slice(0, 1).toUpperCase()}
             </div>
           </div>
         </header>
 
+        {/* MENU MOBILE */}
         {mobileMenu && (
-          <div className="mobile-dropdown">
-            {NAVIGATION.map(item => (
-              <button key={item.id} onClick={() => navigate(item.id)}>
-                <item.icon size={19} /> {item.label}
+          <>
+            <div
+              className="mobile-menu-backdrop"
+              onClick={() => setMobileMenu(false)}
+            />
+
+            <div className="mobile-dropdown">
+              <div className="mobile-dropdown-title">
+                <div className="brand-mark">DN</div>
+                <div>
+                  <strong>DN MED STUDY</strong>
+                  <small>Navigation</small>
+                </div>
+              </div>
+
+              {NAVIGATION.map(item => {
+                const Icon = item.icon;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={active === item.id ? "mobile-nav-item active" : "mobile-nav-item"}
+                    onClick={() => navigate(item.id)}
+                  >
+                    <Icon size={19} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+
+              <div className="mobile-menu-divider" />
+
+              <div className="mobile-menu-label">OUTILS</div>
+
+              {TOOLS.map(tool => {
+                const Icon = tool.icon;
+
+                return (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    className="mobile-nav-item"
+                    onClick={() => {
+                      setAiAction(tool.id);
+                      navigate("ai");
+                    }}
+                  >
+                    <Icon size={19} />
+                    <span>{tool.title}</span>
+                  </button>
+                );
+              })}
+
+              <div className="mobile-menu-divider" />
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="mobile-nav-item"
+                  onClick={() => navigate("admin")}
+                >
+                  <ShieldCheck size={19} />
+                  <span>Administration</span>
+                </button>
+              )}
+
+              {/* PARAMÈTRES DANS LE MENU TROIS TIRETS */}
+              <button
+                type="button"
+                className={active === "settings" ? "mobile-nav-item active" : "mobile-nav-item"}
+                onClick={() => navigate("settings")}
+              >
+                <Settings size={19} />
+                <span>Paramètres</span>
               </button>
-            ))}
 
-            {isAdmin && (
-              <button onClick={() => navigate("admin")}>
-                <ShieldCheck size={19} /> Administration
+              <button
+                type="button"
+                className="mobile-nav-item mobile-logout"
+                onClick={deconnexion}
+              >
+                <LogOut size={19} />
+                <span>Déconnexion</span>
               </button>
-            )}
-
-            <button onClick={() => navigate("settings")}>
-              <Settings size={19} /> Paramètres
-            </button>
-
-            <button onClick={deconnexion}>
-              <LogOut size={19} /> Déconnexion
-            </button>
-          </div>
+            </div>
+          </>
         )}
 
-        <div className="page-wrapper">
+        <div className="page-content">
 
           {/* ACCUEIL */}
-
           {active === "home" && (
-            <div className="page-content">
-              <SectionTitle
-                eyebrow="ESPACE ÉTUDIANT"
-                title={`Bonjour, ${displayName}`}
-                description="Bienvenue sur ton espace de travail médical."
-              />
-
-              <div className="welcome-card">
-                <div>
-                  <span className="welcome-label">DN MED STUDY</span>
-                  <h2>Progresse à ton rythme.</h2>
+            <>
+              <div className="welcome-banner">
+                <div className="welcome-content">
+                  <span className="welcome-tag">
+                    <Stethoscope size={15} /> ESPACE ÉTUDIANT EN MÉDECINE
+                  </span>
+                  <h1>Bienvenue, {displayName} 👋</h1>
                   <p>
-                    Retrouve tes cours, prépare tes examens et améliore
-                    tes connaissances médicales.
+                    Organise tes cours, prépare tes examens et progresse
+                    dans tes études médicales.
                   </p>
-                  <button onClick={() => navigate("courses")}>
-                    Explorer les cours <ChevronRight size={18} />
+                  <button
+                    type="button"
+                    className="welcome-button"
+                    onClick={() => navigate("courses")}
+                  >
+                    Explorer mes cours <ChevronRight size={17} />
                   </button>
                 </div>
-                <div className="welcome-icon">
-                  <Stethoscope size={76} strokeWidth={1.2} />
+                <div className="welcome-decoration">
+                  <GraduationCap size={100} strokeWidth={1} />
                 </div>
               </div>
 
               <div className="stats-grid">
                 <div className="stat-card">
-                  <IconTile icon={BookOpen} color="#2563EB" background="#EAF1FF" />
-                  <div><strong>{courses.length}</strong><span>Cours disponibles</span></div>
+                  <div className="stat-icon blue"><BookOpen size={22} /></div>
+                  <div>
+                    <strong>{courses.length}</strong>
+                    <span>Cours disponibles</span>
+                  </div>
                 </div>
+
                 <div className="stat-card">
-                  <IconTile icon={Layers} color="#7C3AED" background="#F1EAFE" />
-                  <div><strong>{subjects.length}</strong><span>Matières</span></div>
+                  <div className="stat-icon purple"><Layers size={22} /></div>
+                  <div>
+                    <strong>{subjects.length}</strong>
+                    <span>Matières</span>
+                  </div>
                 </div>
+
                 <div className="stat-card">
-                  <IconTile icon={ClipboardList} color="#0891B2" background="#E4F7FB" />
-                  <div><strong>{exams.length}</strong><span>Examens disponibles</span></div>
+                  <div className="stat-icon orange"><ClipboardList size={22} /></div>
+                  <div>
+                    <strong>{exams.length}</strong>
+                    <span>Examens</span>
+                  </div>
                 </div>
+
                 <div className="stat-card">
-                  <IconTile icon={History} color="#059669" background="#E5F8EF" />
-                  <div><strong>{history.length}</strong><span>Activités réalisées</span></div>
+                  <div className="stat-icon green"><History size={22} /></div>
+                  <div>
+                    <strong>{history.length}</strong>
+                    <span>Révisions effectuées</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="content-section">
-                <div className="section-heading">
-                  <div>
-                    <h2>Outils de révision</h2>
-                    <p>Travaille efficacement tes cours.</p>
-                  </div>
-                  <button className="text-button" onClick={() => navigate("ai")}>
-                    Voir tout <ChevronRight size={17} />
-                  </button>
-                </div>
+              <SectionTitle
+                eyebrow="APPRENTISSAGE"
+                title="Tes outils de révision"
+                description="Choisis un outil pour travailler efficacement."
+              />
 
-                <div className="tools-grid">
-                  {TOOLS.map(tool => (
+              <div className="tools-grid">
+                {TOOLS.map(tool => {
+                  const Icon = tool.icon;
+
+                  return (
                     <button
-                      className="tool-card"
+                      type="button"
                       key={tool.id}
+                      className="tool-card"
                       onClick={() => {
                         setAiAction(tool.id);
                         navigate("ai");
                       }}
                     >
-                      <IconTile icon={tool.icon} color={tool.color} background={tool.background} />
+                      <IconTile
+                        icon={Icon}
+                        color={tool.color}
+                        background={tool.background}
+                      />
                       <h3>{tool.title}</h3>
                       <p>{tool.description}</p>
-                      <span className="tool-arrow">Commencer <ChevronRight size={16} /></span>
+                      <span className="tool-card-link">
+                        Commencer <ChevronRight size={16} />
+                      </span>
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
-              <div className="content-section">
-                <div className="section-heading">
-                  <div>
-                    <h2>Activités récentes</h2>
-                    <p>Les dernières opérations de ton espace.</p>
-                  </div>
-                </div>
+              <SectionTitle
+                eyebrow="RÉCEMMENT AJOUTÉS"
+                title="Derniers cours"
+                description="Retrouve rapidement les derniers documents publiés."
+                action={
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => navigate("courses")}
+                  >
+                    Voir tout <ChevronRight size={16} />
+                  </button>
+                }
+              />
 
-                {history.length === 0 ? (
-                  <EmptyState
-                    icon={History}
-                    title="Aucune activité pour le moment"
-                    description="Tes prochaines activités apparaîtront ici."
-                  />
-                ) : (
-                  <div className="history-list">
-                    {history.slice(0, 5).map(item => (
-                      <div className="history-item" key={item.id}>
-                        <IconTile icon={FileText} color="#2563EB" background="#EAF1FF" size={21} />
-                        <div className="history-info">
-                          <strong>{item.titre || "Activité de révision"}</strong>
-                          <span>{item.type || "Révision"}</span>
+              {courses.length === 0 ? (
+                <EmptyState
+                  icon={BookOpen}
+                  title="Aucun cours disponible"
+                  description="Les cours publiés apparaîtront ici."
+                />
+              ) : (
+                <div className="course-grid">
+                  {courses.slice(0, 4).map(course => (
+                    <article className="course-card" key={course.id}>
+                      <div className="course-card-top">
+                        <div className="course-file-icon">
+                          <FileText size={23} />
                         </div>
-                        <span className="history-date">{formatDate(item.createdAt)}</span>
-                        <button className="icon-button" onClick={() => ouvrirResultat(item)}>
-                          <Eye size={18} />
+                        <span className="course-type">PDF / COURS</span>
+                      </div>
+                      <h3>{course.titre || course.title || "Cours sans titre"}</h3>
+                      <p>{course.matiere || "Matière non précisée"}</p>
+                      <div className="course-card-bottom">
+                        <small>{formatDate(course.createdAt)}</small>
+                        <button
+                          type="button"
+                          onClick={() => ouvrirCours(course)}
+                        >
+                          Ouvrir <ExternalLink size={15} />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {/* MES COURS */}
-
           {active === "courses" && (
-            <div className="page-content">
+            <>
               <SectionTitle
-                eyebrow="BIBLIOTHÈQUE UNIVERSITAIRE"
+                eyebrow="BIBLIOTHÈQUE"
                 title="Mes cours"
-                description="Retrouve les supports de cours organisés par matière."
-                action={isAdmin && (
-                  <button className="primary-button" onClick={() => setModal("subject")}>
-                    <Plus size={18} /> Nouvelle matière
-                  </button>
-                )}
+                description="Retrouve les supports de cours par matière, niveau et semestre."
+                action={
+                  isAdmin && (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => setModal("course")}
+                    >
+                      <Plus size={18} /> Ajouter un cours
+                    </button>
+                  )
+                }
               />
 
               <div className="filter-panel">
                 <div className="search-box">
-                  <Search size={19} />
+                  <Search size={18} />
                   <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder="Rechercher un cours ou une matière..."
                   />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
 
-                <div className="filters-row">
-                  <select value={filterUniversity} onChange={e => setFilterUniversity(e.target.value)}>
-                    <option value="">Toutes les universités</option>
-                    {universities.map(item => <option key={item}>{item}</option>)}
-                  </select>
+                <select
+                  value={filterUniversity}
+                  onChange={e => setFilterUniversity(e.target.value)}
+                >
+                  <option value="">Toutes les universités</option>
+                  {universities.map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
 
-                  <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}>
-                    <option value="">Tous les niveaux</option>
-                    {levels.map(item => <option key={item}>{item}</option>)}
-                  </select>
+                <select
+                  value={filterLevel}
+                  onChange={e => setFilterLevel(e.target.value)}
+                >
+                  <option value="">Tous les niveaux</option>
+                  {levels.map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
 
-                  <select value={filterSemester} onChange={e => setFilterSemester(e.target.value)}>
-                    <option value="">Tous les semestres</option>
-                    {semesters.map(item => <option key={item}>{item}</option>)}
-                  </select>
-                </div>
+                <select
+                  value={filterSemester}
+                  onChange={e => setFilterSemester(e.target.value)}
+                >
+                  <option value="">Tous les semestres</option>
+                  {semesters.map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  className="reset-filter"
+                  onClick={() => {
+                    setSearch("");
+                    setFilterUniversity("");
+                    setFilterLevel("");
+                    setFilterSemester("");
+                    setSelectedSubject(null);
+                  }}
+                >
+                  <RefreshCw size={15} /> Réinitialiser
+                </button>
               </div>
 
-              {selectedSubject && (
-                <button className="back-button" onClick={() => setSelectedSubject(null)}>
-                  <ArrowLeft size={17} /> Retour aux matières
+              <div className="subject-list">
+                <button
+                  type="button"
+                  className={!selectedSubject ? "subject-chip active" : "subject-chip"}
+                  onClick={() => setSelectedSubject(null)}
+                >
+                  Toutes les matières
                 </button>
-              )}
 
-              {!selectedSubject ? (
-                <>
-                  <div className="section-heading">
-                    <div>
-                      <h2>Les matières</h2>
-                      <p>{availableSubjects.length} matière(s) disponible(s)</p>
-                    </div>
-                  </div>
+                {availableSubjects.map(subject => (
+                  <button
+                    type="button"
+                    key={subject.id}
+                    className={
+                      selectedSubject?.id === subject.id
+                        ? "subject-chip active"
+                        : "subject-chip"
+                    }
+                    onClick={() => setSelectedSubject(subject)}
+                  >
+                    {subject.nom}
+                  </button>
+                ))}
+              </div>
 
-                  {availableSubjects.length === 0 ? (
-                    <EmptyState
-                      icon={BookOpen}
-                      title="Aucune matière disponible"
-                      description="Les matières publiées apparaîtront ici."
-                    />
-                  ) : (
-                    <div className="subjects-grid">
-                      {availableSubjects.map(subject => {
-                        const count = courses.filter(course =>
-                          course.matiereId === subject.id ||
-                          (course.matiere || course.subject) === subject.nom
-                        ).length;
-
-                        return (
-                          <div className="subject-card" key={subject.id}>
-                            <button
-                              className="subject-main"
-                              onClick={() => setSelectedSubject(subject)}
-                            >
-                              <IconTile icon={BookMarked} color="#2563EB" background="#EAF1FF" />
-                              <h3>{subject.nom}</h3>
-                              <p>{subject.filiere} · {subject.niveau}</p>
-                              <span>{subject.semestre}</span>
-                              <div className="subject-footer">
-                                <span>{count} leçon(s)</span>
-                                <ChevronRight size={19} />
-                              </div>
-                            </button>
-
-                            {isAdmin && (
-                              <button
-                                className="delete-subject"
-                                onClick={() => supprimerElement("matieres", subject.id)}
-                                title="Supprimer la matière"
-                              >
-                                <Trash2 size={17} />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
+              {visibleCourses.length === 0 ? (
+                <EmptyState
+                  icon={BookOpen}
+                  title="Aucun cours trouvé"
+                  description="Essaie de modifier les filtres ou d'ajouter un cours."
+                />
               ) : (
-                <div className="content-section">
-                  <div className="section-heading">
-                    <div>
-                      <h2>{selectedSubject.nom}</h2>
-                      <p>
-                        {selectedSubject.universite} · {selectedSubject.niveau} · {selectedSubject.semestre}
-                      </p>
-                    </div>
+                <div className="course-grid">
+                  {visibleCourses.map(course => (
+                    <article className="course-card" key={course.id}>
+                      <div className="course-card-top">
+                        <div className="course-file-icon">
+                          <FileText size={23} />
+                        </div>
+                        <span className="course-type">SUPPORT DE COURS</span>
+                      </div>
 
-                    {isAdmin && (
-                      <button
-                        className="primary-button"
-                        onClick={() => {
-                          setCourseForm({
-                            titre: "",
-                            matiereId: selectedSubject.id,
-                            url: "",
-                            description: ""
-                          });
-                          setLessonFile(null);
-                          setModal("course");
-                        }}
-                      >
-                        <Plus size={18} /> Ajouter une leçon
-                      </button>
-                    )}
-                  </div>
+                      <h3>{course.titre || course.title || "Cours sans titre"}</h3>
+                      <p>{course.matiere || "Matière non précisée"}</p>
 
-                  {visibleCourses.length === 0 ? (
-                    <EmptyState
-                      icon={FileText}
-                      title="Aucune leçon publiée"
-                      description="Les supports de cette matière apparaîtront ici."
-                    />
-                  ) : (
-                    <div className="lesson-list">
-                      {visibleCourses.map(course => (
-                        <div className="lesson-card" key={course.id}>
-                          <IconTile icon={FileText} color="#DC2626" background="#FEECEC" />
-                          <div className="lesson-info">
-                            <h3>{course.titre || course.title}</h3>
-                            <p>{course.description || selectedSubject.nom}</p>
-                          </div>
-                          <button className="outline-button" onClick={() => ouvrirCours(course)}>
-                            <ExternalLink size={16} /> Ouvrir le PDF
+                      <div className="course-meta">
+                        {course.niveau && <span>{course.niveau}</span>}
+                        {course.semestre && <span>{course.semestre}</span>}
+                      </div>
+
+                      <div className="course-card-bottom">
+                        <small>{formatDate(course.createdAt)}</small>
+                        <div className="course-actions">
+                          <button
+                            type="button"
+                            onClick={() => ouvrirCours(course)}
+                          >
+                            Ouvrir <ExternalLink size={15} />
                           </button>
+
                           {isAdmin && (
                             <button
-                              className="icon-button danger"
+                              type="button"
+                              className="delete-button"
                               onClick={() => supprimerElement("cours", course.id)}
+                              aria-label="Supprimer le cours"
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={16} />
                             </button>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
+                    </article>
+                  ))}
                 </div>
               )}
-            </div>
+            </>
+          )}
+
+          {/* RÉVISER */}
+          {active === "revision" && (
+            <>
+              <SectionTitle
+                eyebrow="ENTRAÎNEMENT"
+                title="Espace de révision"
+                description="Travaille tes connaissances avec les outils de révision."
+              />
+
+              <div className="revision-intro">
+                <div className="revision-intro-icon">
+                  <Brain size={42} />
+                </div>
+                <div>
+                  <h2>Apprends à ton rythme</h2>
+                  <p>
+                    Utilise tes supports de cours pour créer des exercices,
+                    des cartes de mémorisation et des résumés.
+                  </p>
+                </div>
+              </div>
+
+              <div className="tools-grid">
+                {TOOLS.map(tool => {
+                  const Icon = tool.icon;
+
+                  return (
+                    <button
+                      type="button"
+                      key={tool.id}
+                      className="tool-card"
+                      onClick={() => {
+                        setAiAction(tool.id);
+                        navigate("ai");
+                      }}
+                    >
+                      <IconTile
+                        icon={Icon}
+                        color={tool.color}
+                        background={tool.background}
+                      />
+                      <h3>{tool.title}</h3>
+                      <p>{tool.description}</p>
+                      <span className="tool-card-link">
+                        Utiliser <ChevronRight size={16} />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <SectionTitle
+                eyebrow="ACTIVITÉ"
+                title="Historique de révision"
+                description="Consulte les dernières activités réalisées."
+              />
+
+              {history.length === 0 ? (
+                <EmptyState
+                  icon={History}
+                  title="Aucune activité pour le moment"
+                  description="Tes résultats de révision apparaîtront ici."
+                />
+              ) : (
+                <div className="history-list">
+                  {history.slice(0, 8).map(item => (
+                    <button
+                      type="button"
+                      className="history-item"
+                      key={item.id}
+                      onClick={() => ouvrirResultat(item)}
+                    >
+                      <div className="history-icon">
+                        <FileCheck size={20} />
+                      </div>
+                      <div className="history-info">
+                        <strong>{item.titre || "Révision"}</strong>
+                        <small>
+                          {item.type || "Activité"} · {formatDate(item.createdAt)}
+                        </small>
+                      </div>
+                      <ChevronRight size={18} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {/* EXAMENS */}
-
           {active === "exams" && (
-            <div className="page-content">
+            <>
               <SectionTitle
-                eyebrow="ENTRAÎNEMENT"
+                eyebrow="ANNALES"
                 title="Examens"
-                description="Prépare-toi avec les anciens sujets et leurs corrections."
-                action={isAdmin && (
-                  <button className="primary-button" onClick={() => setModal("exam")}>
-                    <Plus size={18} /> Ajouter un examen
-                  </button>
-                )}
+                description="Prépare-toi avec les sujets et corrections disponibles."
+                action={
+                  isAdmin && (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => setModal("exam")}
+                    >
+                      <Plus size={18} /> Ajouter un examen
+                    </button>
+                  )
+                }
               />
 
               <div className="filter-panel">
                 <div className="search-box">
-                  <Search size={19} />
+                  <Search size={18} />
                   <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
@@ -1207,1603 +1542,2384 @@ export default function HomePage() {
                   />
                 </div>
 
-                <div className="filters-row">
-                  <select value={filterUniversity} onChange={e => setFilterUniversity(e.target.value)}>
-                    <option value="">Toutes les universités</option>
-                    {universities.map(item => <option key={item}>{item}</option>)}
-                  </select>
-                  <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}>
-                    <option value="">Tous les niveaux</option>
-                    {levels.map(item => <option key={item}>{item}</option>)}
-                  </select>
-                  <select value={filterSemester} onChange={e => setFilterSemester(e.target.value)}>
-                    <option value="">Tous les semestres</option>
-                    {semesters.map(item => <option key={item}>{item}</option>)}
-                  </select>
-                </div>
+                <select
+                  value={filterUniversity}
+                  onChange={e => setFilterUniversity(e.target.value)}
+                >
+                  <option value="">Toutes les universités</option>
+                  {universities.map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filterLevel}
+                  onChange={e => setFilterLevel(e.target.value)}
+                >
+                  <option value="">Tous les niveaux</option>
+                  {levels.map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filterSemester}
+                  onChange={e => setFilterSemester(e.target.value)}
+                >
+                  <option value="">Tous les semestres</option>
+                  {semesters.map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
               </div>
 
               {filteredExams.length === 0 ? (
                 <EmptyState
                   icon={ClipboardList}
                   title="Aucun examen disponible"
-                  description="Les sujets publiés apparaîtront ici."
+                  description="Les sujets d'examen apparaîtront ici après publication."
                 />
               ) : (
-                <div className="exams-grid">
+                <div className="exam-grid">
                   {filteredExams.map(exam => (
-                    <div className="exam-card" key={exam.id}>
-                      <div className="exam-top">
-                        <IconTile icon={ClipboardList} color="#7C3AED" background="#F1EAFE" />
-                        <span className="exam-year">{exam.annee || "Année non précisée"}</span>
+                    <article className="exam-card" key={exam.id}>
+                      <div className="exam-card-icon">
+                        <ClipboardList size={25} />
                       </div>
 
-                      <h3>{exam.titre}</h3>
-                      <p>{exam.matiere}</p>
+                      <div className="exam-card-content">
+                        <h3>{exam.titre}</h3>
+                        <p>{exam.matiere}</p>
 
-                      <div className="exam-details">
-                        <span>{exam.niveau}</span>
-                        <span>{exam.semestre}</span>
-                      </div>
+                        <div className="exam-meta">
+                          {exam.universite && <span>{exam.universite}</span>}
+                          {exam.niveau && <span>{exam.niveau}</span>}
+                          {exam.semestre && <span>{exam.semestre}</span>}
+                          {exam.annee && <span>{exam.annee}</span>}
+                        </div>
 
-                      <div className="exam-actions">
-                        <a href={exam.url} target="_blank" rel="noopener noreferrer" className="primary-button">
-                          <FileText size={16} /> Ouvrir le sujet
-                        </a>
-
-                        {exam.correctionUrl ? (
-                          <a href={exam.correctionUrl} target="_blank" rel="noopener noreferrer" className="outline-button">
-                            <FileCheck size={16} /> Voir la correction
+                        <div className="exam-actions">
+                          <a
+                            href={exam.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="primary-button small"
+                          >
+                            Sujet <ExternalLink size={14} />
                           </a>
-                        ) : (
-                          <span className="no-correction">Correction non disponible</span>
-                        )}
-                      </div>
 
-                      {isAdmin && (
-                        <button className="delete-exam" onClick={() => supprimerElement("examens", exam.id)}>
-                          <Trash2 size={17} /> Supprimer
-                        </button>
-                      )}
-                    </div>
+                          {exam.correctionUrl && (
+                            <a
+                              href={exam.correctionUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="secondary-button small"
+                            >
+                              Correction <FileCheck size={14} />
+                            </a>
+                          )}
+
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="delete-button"
+                              onClick={() => supprimerElement("examens", exam.id)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
                   ))}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* RÉVISION */}
-
-          {active === "revision" && (
-            <div className="page-content">
-              <SectionTitle
-                eyebrow="APPRENTISSAGE"
-                title="Révision"
-                description="Retrouve tes outils pour consolider tes connaissances."
-              />
-
-              <div className="tools-grid">
-                {TOOLS.map(tool => (
-                  <button
-                    className="tool-card"
-                    key={tool.id}
-                    onClick={() => {
-                      setAiAction(tool.id);
-                      navigate("ai");
-                    }}
-                  >
-                    <IconTile icon={tool.icon} color={tool.color} background={tool.background} />
-                    <h3>{tool.title}</h3>
-                    <p>{tool.description}</p>
-                    <span className="tool-arrow">Commencer <ChevronRight size={16} /></span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="content-section">
-                <div className="section-heading">
-                  <div>
-                    <h2>Historique des révisions</h2>
-                    <p>Consulte tes derniers résultats.</p>
-                  </div>
-                </div>
-
-                {history.length === 0 ? (
-                  <EmptyState
-                    icon={History}
-                    title="Aucun résultat enregistré"
-                    description="Tes résultats seront conservés ici."
-                  />
-                ) : (
-                  <div className="history-list">
-                    {history.map(item => (
-                      <div className="history-item" key={item.id}>
-                        <IconTile icon={FileText} color="#2563EB" background="#EAF1FF" size={21} />
-                        <div className="history-info">
-                          <strong>{item.titre || "Révision"}</strong>
-                          <span>{item.type || "Activité"}</span>
-                        </div>
-                        <span className="history-date">{formatDate(item.createdAt)}</span>
-                        <button className="outline-button" onClick={() => ouvrirResultat(item)}>
-                          Consulter
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            </>
           )}
 
           {/* ASSISTANT IA */}
-
           {active === "ai" && (
-            <div className="page-content">
+            <>
               <SectionTitle
-                eyebrow="ASSISTANT INTELLIGENT"
+                eyebrow="ASSISTANT D'ÉTUDES"
                 title="Assistant IA"
-                description="Travaille tes documents médicaux et prépare tes révisions."
+                description="Dépose un cours PDF et choisis le travail à réaliser."
               />
 
-              <div className="ai-container">
-                <div className="ai-intro">
-                  <div className="ai-logo"><Sparkles size={30} /></div>
-                  <div>
-                    <h2>Ton assistant de révision</h2>
-                    <p>Importe un cours au format PDF et choisis ce que tu souhaites préparer.</p>
-                  </div>
-                </div>
-
-                <form onSubmit={lancerIA}>
-                  <label className="upload-area">
-                    <input
-                      type="file"
-                      accept="application/pdf,.pdf"
-                      onChange={e => setAiFile(e.target.files?.[0] || null)}
-                      hidden
-                    />
-                    <Upload size={30} />
-                    <strong>{aiFile ? aiFile.name : "Importer un document PDF"}</strong>
-                    <span>
-                      {aiFile ? "Document sélectionné" : "Clique ici pour choisir un fichier depuis ton appareil"}
-                    </span>
-                  </label>
-
-                  <div className="ai-actions">
-                    {TOOLS.map(tool => (
-                      <button
-                        type="button"
-                        key={tool.id}
-                        className={`ai-action ${aiAction === tool.id ? "selected" : ""}`}
-                        onClick={() => setAiAction(tool.id)}
-                      >
-                        <tool.icon size={19} /> {tool.title}
-                      </button>
-                    ))}
-                  </div>
-
-                  <label className="field">
-                    <span>Question ou consigne supplémentaire (facultatif)</span>
-                    <textarea
-                      value={aiQuestion}
-                      onChange={e => setAiQuestion(e.target.value)}
-                      placeholder="Exemple : Explique les notions importantes de ce cours..."
-                      rows={4}
-                    />
-                  </label>
-
-                  <button className="primary-button ai-submit" type="submit" disabled={busy}>
-                    {busy ? (
-                      <>
-                        <LoaderCircle className="spin" size={19} />
-                        {actionLabels[aiAction] || "Préparation en cours..."}
-                      </>
-                    ) : (
-                      <><Sparkles size={19} /> Lancer la préparation</>
-                    )}
-                  </button>
-                </form>
-
-                {aiResult && (
-                  <div className="ai-result">
-                    <div className="result-header">
-                      <div>
-                        <span className="eyebrow">TON RÉSULTAT</span>
-                        <h2>Contenu généré</h2>
-                      </div>
-                      <button className="outline-button" onClick={copierResultat}>
-                        <Bookmark size={17} /> Copier
-                      </button>
+              <div className="ai-layout">
+                <div className="ai-main-card">
+                  <div className="ai-card-heading">
+                    <div className="ai-heading-icon">
+                      <Sparkles size={24} />
                     </div>
-                    <div className="result-content">{aiResult}</div>
+                    <div>
+                      <h2>Que souhaites-tu préparer ?</h2>
+                      <p>Choisis une fonctionnalité et ajoute ton document.</p>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          )}
 
-          {/* ADMINISTRATION */}
+                  <div className="ai-tool-options">
+                    {TOOLS.map(tool => {
+                      const Icon = tool.icon;
 
-          {active === "admin" && (
-            <div className="page-content">
-              {!isAdmin ? (
-                <EmptyState
-                  icon={ShieldCheck}
-                  title="Accès réservé"
-                  description="Cette section est réservée à l'administrateur."
-                />
-              ) : (
-                <>
-                  <SectionTitle
-                    eyebrow="GESTION DE LA PLATEFORME"
-                    title="Administration"
-                    description="Gère les matières, les supports de cours et les examens."
-                  />
+                      return (
+                        <button
+                          type="button"
+                          key={tool.id}
+                          className={
+                            aiAction === tool.id
+                              ? "ai-tool-option selected"
+                              : "ai-tool-option"
+                          }
+                          onClick={() => setAiAction(tool.id)}
+                        >
+                          <Icon size={20} />
+                          <span>{tool.title}</span>
+                          {aiAction === tool.id && (
+                            <CheckCircle2 size={17} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                  <div className="admin-grid">
-                    <button className="admin-card" onClick={() => setModal("subject")}>
-                      <IconTile icon={BookOpen} color="#2563EB" background="#EAF1FF" />
-                      <h3>Créer une matière</h3>
-                      <p>Définir une matière, son niveau et son semestre.</p>
-                      <ChevronRight size={19} />
-                    </button>
+                  <form onSubmit={lancerIA}>
+                    <label className="upload-zone">
+                      <input
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        onChange={e => setAiFile(e.target.files?.[0] || null)}
+                      />
+                      <div className="upload-zone-icon">
+                        <Upload size={28} />
+                      </div>
+                      <strong>
+                        {aiFile ? aiFile.name : "Importer ton cours PDF"}
+                      </strong>
+                      <span>
+                        Appuie ici pour sélectionner un document depuis ton téléphone.
+                      </span>
+                      <small>Format PDF uniquement</small>
+                    </label>
+
+                    {aiAction === "chat" && (
+                      <label className="field">
+                        <span>Ta question</span>
+                        <textarea
+                          value={aiQuestion}
+                          onChange={e => setAiQuestion(e.target.value)}
+                          placeholder="Pose ta question sur le cours..."
+                          rows={4}
+                        />
+                      </label>
+                    )}
 
                     <button
-                      className="admin-card"
-                      onClick={() => {
-                        setCourseForm({ titre: "", matiereId: "", url: "", description: "" });
-                        setLessonFile(null);
-                        setUploadProgress(0);
-                        setModal("course");
-                      }}
+                      type="submit"
+                      className="primary-button ai-submit"
+                      disabled={busy || !aiFile}
                     >
-                      <IconTile icon={FilePlus2} color="#0891B2" background="#E4F7FB" />
-                      <h3>Publier un cours</h3>
-                      <p>Ajouter une leçon et son document PDF.</p>
-                      <ChevronRight size={19} />
+                      {busy ? (
+                        <>
+                          <LoaderCircle className="spin" size={18} />
+                          {actionLabels[aiAction] || "Préparation de votre réponse..."}
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={18} />
+                          Lancer la préparation
+                        </>
+                      )}
                     </button>
+                  </form>
 
-                    <button className="admin-card" onClick={() => setModal("exam")}>
-                      <IconTile icon={ClipboardList} color="#7C3AED" background="#F1EAFE" />
-                      <h3>Ajouter un examen</h3>
-                      <p>Publier un sujet et sa correction facultative.</p>
-                      <ChevronRight size={19} />
-                    </button>
-                  </div>
-
-                  <div className="content-section">
-                    <div className="section-heading">
-                      <div>
-                        <h2>Contenu publié</h2>
-                        <p>Vue d'ensemble de la bibliothèque.</p>
+                  {aiResult && (
+                    <div className="ai-result">
+                      <div className="ai-result-header">
+                        <h3>Résultat</h3>
+                        <button
+                          type="button"
+                          className="secondary-button small"
+                          onClick={copierResultat}
+                        >
+                          Copier <FileText size={15} />
+                        </button>
                       </div>
-                      <button className="outline-button" onClick={chargerDonnees}>
-                        <RefreshCw size={17} /> Actualiser
-                      </button>
+                      <div className="ai-result-content">
+                        {aiResult}
+                      </div>
                     </div>
+                  )}
+                </div>
 
-                    <div className="stats-grid">
-                      <div className="stat-card"><strong>{subjects.length}</strong><span>Matières</span></div>
-                      <div className="stat-card"><strong>{courses.length}</strong><span>Leçons</span></div>
-                      <div className="stat-card"><strong>{exams.length}</strong><span>Examens</span></div>
-                    </div>
+                <aside className="ai-side-card">
+                  <div className="ai-side-icon">
+                    <BookMarked size={25} />
                   </div>
-                </>
-              )}
-            </div>
+                  <h3>Conseil de révision</h3>
+                  <p>
+                    Pour de meilleurs résultats, utilise un PDF lisible,
+                    avec des pages bien orientées et un texte suffisamment net.
+                  </p>
+
+                  <div className="ai-side-divider" />
+
+                  <h4>Historique récent</h4>
+
+                  {history.length === 0 ? (
+                    <p className="muted-text">Aucune révision enregistrée.</p>
+                  ) : (
+                    history.slice(0, 4).map(item => (
+                      <button
+                        type="button"
+                        className="mini-history-item"
+                        key={item.id}
+                        onClick={() => ouvrirResultat(item)}
+                      >
+                        <FileText size={16} />
+                        <span>{item.titre || "Révision"}</span>
+                      </button>
+                    ))
+                  )}
+                </aside>
+              </div>
+            </>
           )}
-
           {/* PARAMÈTRES */}
-
           {active === "settings" && (
-            <div className="page-content">
+            <>
               <SectionTitle
                 eyebrow="PERSONNALISATION"
                 title="Paramètres"
-                description="Configure ton espace de travail."
+                description="Gère les préférences de ton espace DN MED STUDY."
               />
 
               <div className="settings-card">
-                <div className="settings-row">
-                  <IconTile icon={UserRound} color="#2563EB" background="#EAF1FF" />
+                <div className="settings-heading">
+                  <div className="settings-icon"><UserRound size={24} /></div>
                   <div>
-                    <strong>Compte étudiant</strong>
-                    <p>{user?.email}</p>
+                    <h3>Mon compte</h3>
+                    <p>Informations de ton compte étudiant.</p>
                   </div>
                 </div>
 
                 <div className="settings-row">
-                  <IconTile icon={Settings} color="#7C3AED" background="#F1EAFE" />
-                  <div>
-                    <strong>Apparence</strong>
-                    <p>Choisis le thème de ton application.</p>
-                  </div>
-                  <button className="outline-button" onClick={() => setDark(!dark)}>
-                    {dark ? "Mode clair" : "Mode sombre"}
-                  </button>
+                  <span>Nom affiché</span>
+                  <strong>{displayName}</strong>
                 </div>
 
                 <div className="settings-row">
-                  <IconTile icon={LogOut} color="#DC2626" background="#FEECEC" />
+                  <span>Adresse e-mail</span>
+                  <strong>{user?.email || "Non renseignée"}</strong>
+                </div>
+
+                <div className="settings-row">
+                  <span>Type de compte</span>
+                  <strong>{isAdmin ? "Administrateur" : "Étudiant"}</strong>
+                </div>
+              </div>
+
+              <div className="settings-card">
+                <div className="settings-heading">
+                  <div className="settings-icon"><Settings size={24} /></div>
                   <div>
-                    <strong>Déconnexion</strong>
-                    <p>Quitter ton compte.</p>
+                    <h3>Apparence</h3>
+                    <p>Personnalise l'affichage de la plateforme.</p>
                   </div>
-                  <button className="outline-button danger" onClick={deconnexion}>
-                    Se déconnecter
+                </div>
+
+                <div className="settings-row">
+                  <div>
+                    <strong>Mode sombre</strong>
+                    <small>Modifier l'apparence de l'application.</small>
+                  </div>
+
+                  <button
+                    type="button"
+                    className={dark ? "toggle-switch enabled" : "toggle-switch"}
+                    onClick={() => setDark(!dark)}
+                    aria-label="Activer ou désactiver le mode sombre"
+                  >
+                    <span />
                   </button>
                 </div>
               </div>
-            </div>
+
+              <div className="settings-card">
+                <div className="settings-heading">
+                  <div className="settings-icon"><ShieldCheck size={24} /></div>
+                  <div>
+                    <h3>Sécurité</h3>
+                    <p>Gère la session de ton compte.</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="secondary-button settings-logout"
+                  onClick={deconnexion}
+                >
+                  <LogOut size={17} /> Se déconnecter
+                </button>
+              </div>
+            </>
           )}
 
+          {/* ADMINISTRATION */}
+          {active === "admin" && isAdmin && (
+            <>
+              <SectionTitle
+                eyebrow="GESTION DE LA PLATEFORME"
+                title="Administration"
+                description="Ajoute et organise les ressources pédagogiques."
+              />
+
+              <div className="admin-actions-grid">
+                <button
+                  type="button"
+                  className="admin-action-card"
+                  onClick={() => setModal("subject")}
+                >
+                  <div className="admin-action-icon purple">
+                    <BookMarked size={25} />
+                  </div>
+                  <h3>Ajouter une matière</h3>
+                  <p>Créer une matière et définir son niveau et son semestre.</p>
+                  <span>Ajouter <ChevronRight size={16} /></span>
+                </button>
+
+                <button
+                  type="button"
+                  className="admin-action-card"
+                  onClick={() => setModal("course")}
+                >
+                  <div className="admin-action-icon blue">
+                    <Upload size={25} />
+                  </div>
+                  <h3>Publier un cours</h3>
+                  <p>Ajouter un document PDF depuis ton appareil ou un lien.</p>
+                  <span>Publier <ChevronRight size={16} /></span>
+                </button>
+
+                <button
+                  type="button"
+                  className="admin-action-card"
+                  onClick={() => setModal("exam")}
+                >
+                  <div className="admin-action-icon orange">
+                    <ClipboardList size={25} />
+                  </div>
+                  <h3>Ajouter un examen</h3>
+                  <p>Publier un sujet et éventuellement sa correction.</p>
+                  <span>Ajouter <ChevronRight size={16} /></span>
+                </button>
+              </div>
+
+              <div className="admin-summary">
+                <div>
+                  <strong>{subjects.length}</strong>
+                  <span>Matières</span>
+                </div>
+                <div>
+                  <strong>{courses.length}</strong>
+                  <span>Cours</span>
+                </div>
+                <div>
+                  <strong>{exams.length}</strong>
+                  <span>Examens</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* MODALE MATIÈRE */}
+          {modal === "subject" && (
+            <Modal
+              title="Ajouter une matière"
+              onClose={() => setModal("")}
+            >
+              <form className="modal-form" onSubmit={ajouterMatiere}>
+                <Field
+                  label="Université"
+                  value={subjectForm.universite}
+                  onChange={value =>
+                    setSubjectForm(prev => ({ ...prev, universite: value }))
+                  }
+                  placeholder="Ex. UCAD"
+                  required
+                />
+
+                <Field
+                  label="Filière"
+                  value={subjectForm.filiere}
+                  onChange={value =>
+                    setSubjectForm(prev => ({ ...prev, filiere: value }))
+                  }
+                  placeholder="Ex. Médecine"
+                  required
+                />
+
+                <Field
+                  label="Année universitaire"
+                  value={subjectForm.annee || ""}
+                  onChange={value =>
+                    setSubjectForm(prev => ({ ...prev, annee: value }))
+                  }
+                  placeholder="Ex. 2026-2027"
+                />
+
+                <Field
+                  label="Niveau"
+                  value={subjectForm.niveau}
+                  onChange={value =>
+                    setSubjectForm(prev => ({ ...prev, niveau: value }))
+                  }
+                  placeholder="Ex. Deuxième année"
+                  required
+                />
+
+                <SelectField
+                  label="Semestre"
+                  value={subjectForm.semestre}
+                  onChange={value =>
+                    setSubjectForm(prev => ({ ...prev, semestre: value }))
+                  }
+                  options={semesters}
+                />
+
+                <Field
+                  label="Nom de la matière"
+                  value={subjectForm.nom}
+                  onChange={value =>
+                    setSubjectForm(prev => ({ ...prev, nom: value }))
+                  }
+                  placeholder="Ex. Anatomie"
+                  required
+                />
+
+                <button
+                  type="submit"
+                  className="primary-button full-button"
+                  disabled={busy}
+                >
+                  {busy ? "Enregistrement..." : "Enregistrer la matière"}
+                </button>
+              </form>
+            </Modal>
+          )}
+
+          {/* MODALE COURS */}
+          {modal === "course" && (
+            <Modal
+              title="Publier un cours"
+              onClose={() => {
+                if (!busy) {
+                  setModal("");
+                  setLessonFile(null);
+                }
+              }}
+            >
+              <form className="modal-form" onSubmit={ajouterLecon}>
+                <Field
+                  label="Titre du cours"
+                  value={courseForm.titre}
+                  onChange={value =>
+                    setCourseForm(prev => ({ ...prev, titre: value }))
+                  }
+                  placeholder="Ex. Cours d'anatomie générale"
+                  required
+                />
+
+                <SelectField
+                  label="Matière"
+                  value={courseForm.matiereId}
+                  onChange={value =>
+                    setCourseForm(prev => ({ ...prev, matiereId: value }))
+                  }
+                  options={subjects.map(subject => ({
+                    value: subject.id,
+                    label: `${subject.nom} — ${subject.niveau || ""} ${
+                      subject.semestre || ""
+                    }`
+                  }))}
+                />
+
+                <label className="field">
+                  <span>Document PDF depuis ton téléphone</span>
+                  <input
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={e =>
+                      setLessonFile(e.target.files?.[0] || null)
+                    }
+                  />
+                  {lessonFile && (
+                    <small className="file-selected">
+                      <FileCheck size={15} />
+                      {lessonFile.name}
+                    </small>
+                  )}
+                </label>
+
+                <div className="form-separator">
+                  <span>OU</span>
+                </div>
+
+                <Field
+                  label="Lien PDF externe"
+                  value={courseForm.url}
+                  onChange={value =>
+                    setCourseForm(prev => ({ ...prev, url: value }))
+                  }
+                  placeholder="https://..."
+                />
+
+                <label className="field">
+                  <span>Description (facultatif)</span>
+                  <textarea
+                    rows={3}
+                    value={courseForm.description}
+                    onChange={e =>
+                      setCourseForm(prev => ({
+                        ...prev,
+                        description: e.target.value
+                      }))
+                    }
+                    placeholder="Quelques informations sur ce cours..."
+                  />
+                </label>
+
+                {uploading && (
+                  <div className="upload-progress">
+                    <div className="progress-label">
+                      <span>Envoi du PDF</span>
+                      <strong>{uploadProgress}%</strong>
+                    </div>
+                    <div className="progress-track">
+                      <div
+                        className="progress-fill"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="primary-button full-button"
+                  disabled={busy || uploading}
+                >
+                  {busy ? (
+                    <>
+                      <LoaderCircle className="spin" size={17} />
+                      Publication en cours...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={17} />
+                      Publier le cours
+                    </>
+                  )}
+                </button>
+              </form>
+            </Modal>
+          )}
+
+          {/* MODALE EXAMEN */}
+          {modal === "exam" && (
+            <Modal
+              title="Ajouter un examen"
+              onClose={() => setModal("")}
+            >
+              <form className="modal-form" onSubmit={ajouterExamen}>
+                <Field
+                  label="Titre de l'examen"
+                  value={examForm.titre}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, titre: value }))
+                  }
+                  placeholder="Ex. Examen d'anatomie"
+                  required
+                />
+
+                <Field
+                  label="Université"
+                  value={examForm.universite}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, universite: value }))
+                  }
+                  placeholder="Ex. UCAD"
+                />
+
+                <Field
+                  label="Filière"
+                  value={examForm.filiere}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, filiere: value }))
+                  }
+                  placeholder="Ex. Médecine"
+                />
+
+                <Field
+                  label="Année universitaire"
+                  value={examForm.annee}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, annee: value }))
+                  }
+                  placeholder="Ex. 2026-2027"
+                />
+
+                <Field
+                  label="Niveau"
+                  value={examForm.niveau}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, niveau: value }))
+                  }
+                  placeholder="Ex. Deuxième année"
+                />
+
+                <SelectField
+                  label="Semestre"
+                  value={examForm.semestre}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, semestre: value }))
+                  }
+                  options={semesters}
+                />
+
+                <Field
+                  label="Matière"
+                  value={examForm.matiere}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, matiere: value }))
+                  }
+                  placeholder="Ex. Physiologie"
+                  required
+                />
+
+                <Field
+                  label="Lien du sujet"
+                  value={examForm.url}
+                  onChange={value =>
+                    setExamForm(prev => ({ ...prev, url: value }))
+                  }
+                  placeholder="https://..."
+                  required
+                />
+
+                <Field
+                  label="Lien de correction (facultatif)"
+                  value={examForm.correctionUrl}
+                  onChange={value =>
+                    setExamForm(prev => ({
+                      ...prev,
+                      correctionUrl: value
+                    }))
+                  }
+                  placeholder="https://..."
+                />
+
+                <button
+                  type="submit"
+                  className="primary-button full-button"
+                  disabled={busy}
+                >
+                  {busy ? "Enregistrement..." : "Publier l'examen"}
+                </button>
+              </form>
+            </Modal>
+          )}
         </div>
       </section>
 
+      {/* NAVIGATION MOBILE EN BAS */}
       <nav className="mobile-bottom-nav">
-        {NAVIGATION.slice(0, 4).map(item => (
-          <button
-            key={item.id}
-            className={active === item.id ? "active" : ""}
-            onClick={() => navigate(item.id)}
-          >
-            <item.icon size={20} />
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
+        {NAVIGATION.slice(0, 4).map(item => {
+          const Icon = item.icon;
 
-      {/* MODALE MATIÈRE */}
-
-      {modal === "subject" && (
-        <Modal title="Créer une matière" onClose={() => setModal("")}>
-          <form onSubmit={ajouterMatiere} className="modal-form">
-            <Field
-              label="Université"
-              value={subjectForm.universite}
-              onChange={v => setSubjectForm(old => ({ ...old, universite: v }))}
-              placeholder="Ex : UCAD"
-              required
-            />
-            <Field
-              label="Filière"
-              value={subjectForm.filiere}
-              onChange={v => setSubjectForm(old => ({ ...old, filiere: v }))}
-              placeholder="Ex : Médecine"
-              required
-            />
-            <Field
-              label="Niveau académique"
-              value={subjectForm.niveau}
-              onChange={v => setSubjectForm(old => ({ ...old, niveau: v }))}
-              placeholder="Ex : Deuxième année"
-              required
-            />
-            <SelectField
-              label="Semestre"
-              value={subjectForm.semestre}
-              onChange={v => setSubjectForm(old => ({ ...old, semestre: v }))}
-              options={semesters}
-            />
-            <Field
-              label="Nom de la matière"
-              value={subjectForm.nom}
-              onChange={v => setSubjectForm(old => ({ ...old, nom: v }))}
-              placeholder="Ex : Anatomie"
-              required
-            />
-            <button className="primary-button full-button" type="submit" disabled={busy}>
-              {busy ? "Enregistrement..." : "Créer la matière"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* MODALE COURS / PDF */}
-
-      {modal === "course" && (
-        <Modal title="Publier une leçon" onClose={() => !busy && setModal("")}>
-          <form onSubmit={ajouterLecon} className="modal-form">
-            <Field
-              label="Titre de la leçon"
-              value={courseForm.titre}
-              onChange={v => setCourseForm(old => ({ ...old, titre: v }))}
-              placeholder="Ex : Introduction à l'anatomie"
-              required
-            />
-
-            <SelectField
-              label="Matière"
-              value={courseForm.matiereId}
-              onChange={v => setCourseForm(old => ({ ...old, matiereId: v }))}
-              options={subjects.map(s => ({
-                value: s.id,
-                label: `${s.nom} — ${s.niveau}`
-              }))}
-            />
-
-            <label className="field">
-              <span>Document PDF depuis ton appareil</span>
-              <input
-                type="file"
-                accept="application/pdf,.pdf"
-                onChange={e => setLessonFile(e.target.files?.[0] || null)}
-              />
-            </label>
-
-            {lessonFile && (
-              <p className="file-selected">
-                <FileCheck size={17} /> {lessonFile.name}
-              </p>
-            )}
-
-            {uploading && (
-              <div className="upload-progress">
-                <div className="progress-label">
-                  <span>Envoi du PDF...</span>
-                  <strong>{uploadProgress}%</strong>
-                </div>
-                <div className="progress-track">
-                  <div
-                    className="progress-fill"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="separator-text">OU</div>
-
-            <Field
-              label="Lien PDF externe (facultatif)"
-              value={courseForm.url}
-              onChange={v => setCourseForm(old => ({ ...old, url: v }))}
-              placeholder="https://..."
-            />
-
-            <label className="field">
-              <span>Description (facultatif)</span>
-              <textarea
-                rows={3}
-                value={courseForm.description}
-                onChange={e => setCourseForm(old => ({
-                  ...old,
-                  description: e.target.value
-                }))}
-                placeholder="Quelques informations sur cette leçon..."
-              />
-            </label>
-
+          return (
             <button
-              className="primary-button full-button"
-              type="submit"
-              disabled={busy}
+              type="button"
+              key={item.id}
+              className={active === item.id ? "bottom-nav-item active" : "bottom-nav-item"}
+              onClick={() => navigate(item.id)}
             >
-              {uploading
-                ? `Envoi du PDF : ${uploadProgress}%`
-                : busy
-                  ? "Publication en cours..."
-                  : "Publier la leçon"}
+              <Icon size={20} />
+              <span>{item.label}</span>
             </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* MODALE EXAMEN */}
-
-      {modal === "exam" && (
-        <Modal title="Ajouter un examen" onClose={() => setModal("")}>
-          <form onSubmit={ajouterExamen} className="modal-form">
-            <Field
-              label="Titre de l'examen"
-              value={examForm.titre}
-              onChange={v => setExamForm(old => ({ ...old, titre: v }))}
-              placeholder="Ex : Examen d'anatomie"
-              required
-            />
-            <Field
-              label="Université"
-              value={examForm.universite}
-              onChange={v => setExamForm(old => ({ ...old, universite: v }))}
-              placeholder="UCAD"
-            />
-            <Field
-              label="Filière"
-              value={examForm.filiere}
-              onChange={v => setExamForm(old => ({ ...old, filiere: v }))}
-              placeholder="Médecine"
-            />
-            <Field
-              label="Niveau"
-              value={examForm.niveau}
-              onChange={v => setExamForm(old => ({ ...old, niveau: v }))}
-              placeholder="Deuxième année"
-            />
-            <SelectField
-              label="Semestre"
-              value={examForm.semestre}
-              onChange={v => setExamForm(old => ({ ...old, semestre: v }))}
-              options={semesters}
-            />
-            <Field
-              label="Matière"
-              value={examForm.matiere}
-              onChange={v => setExamForm(old => ({ ...old, matiere: v }))}
-              placeholder="Anatomie"
-              required
-            />
-            <Field
-              label="Année de l'examen"
-              value={examForm.annee}
-              onChange={v => setExamForm(old => ({ ...old, annee: v }))}
-              placeholder="2025-2026"
-            />
-            <Field
-              label="Lien du sujet PDF"
-              value={examForm.url}
-              onChange={v => setExamForm(old => ({ ...old, url: v }))}
-              placeholder="https://..."
-              required
-            />
-            <Field
-              label="Lien de correction PDF (facultatif)"
-              value={examForm.correctionUrl}
-              onChange={v => setExamForm(old => ({ ...old, correctionUrl: v }))}
-              placeholder="https://..."
-            />
-            <button className="primary-button full-button" type="submit" disabled={busy}>
-              {busy ? "Enregistrement..." : "Publier l'examen"}
-            </button>
-          </form>
-        </Modal>
-      )}
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-
-        * { box-sizing: border-box; }
-
-        body {
-          margin: 0;
-          font-family: 'DM Sans', sans-serif;
-          background: #F5F7FB;
-          color: #172B43;
-        }
-
-        button, input, select, textarea { font: inherit; }
-        button { cursor: pointer; }
-        button:disabled { opacity: .6; cursor: not-allowed; }
-
-        .app-shell {
-          min-height: 100vh;
-          display: flex;
-          background: #F5F7FB;
-          color: #172B43;
-        }
-
-        .sidebar {
-          width: 255px;
-          background: #10243A;
-          color: white;
-          padding: 26px 17px;
-          display: flex;
-          flex-direction: column;
-          flex-shrink: 0;
-          min-height: 100vh;
-        }
-
-        .brand {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 0 8px 38px;
-        }
-
-        .brand-mark {
-          width: 43px;
-          height: 43px;
-          border-radius: 13px;
-          display: grid;
-          place-items: center;
-          color: white;
-          background: linear-gradient(135deg, #2563EB, #06B6D4);
-          font-size: 19px;
-          font-weight: 800;
-        }
-
-        .brand strong {
-          display: block;
-          font-size: 14px;
-          letter-spacing: .5px;
-        }
-
-        .brand span {
-          display: block;
-          margin-top: 4px;
-          font-size: 11px;
-          color: #AAB8C8;
-        }
-
-        .sidebar-label {
-          padding: 0 11px;
-          color: #91A4B8;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 1.3px;
-          margin-bottom: 14px;
-        }
-
-        .side-navigation { display: grid; gap: 7px; }
-
-        .nav-item {
-          display: flex;
-          align-items: center;
-          gap: 13px;
-          width: 100%;
-          padding: 13px 12px;
-          border: 0;
-          border-radius: 10px;
-          background: transparent;
-          color: #BDCAD8;
-          text-align: left;
-          font-size: 13px;
-          font-weight: 600;
-        }
-
-        .nav-item:hover, .nav-item.active {
-          color: white;
-          background: #243D59;
-        }
-
-        .nav-item.active { box-shadow: inset 3px 0 #3B82F6; }
-
-        .sidebar-bottom { margin-top: auto; }
-
-        .sidebar-profile {
-          display: flex;
-          align-items: center;
-          gap: 11px;
-          border-top: 1px solid #31475D;
-          margin-top: 20px;
-          padding: 20px 5px 0;
-        }
-
-        .avatar, .topbar-avatar {
-          width: 37px;
-          height: 37px;
-          border-radius: 50%;
-          display: grid;
-          place-items: center;
-          background: #2563EB;
-          color: white;
-          font-weight: 800;
-        }
-
-        .sidebar-profile strong {
-          display: block;
-          font-size: 12px;
-        }
-
-        .sidebar-profile span {
-          display: block;
-          color: #AAB8C8;
-          font-size: 10px;
-          margin-top: 4px;
-        }
-
-        .main-area { flex: 1; min-width: 0; }
-
-        .topbar {
-          height: 75px;
-          background: white;
-          border-bottom: 1px solid #E8EDF3;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 0 35px;
-        }
-
-        .topbar-title span {
-          display: block;
-          font-size: 10px;
-          color: #8494A7;
-          letter-spacing: 1px;
-          font-weight: 700;
-        }
-
-        .topbar-title strong {
-          display: block;
-          margin-top: 3px;
-          font-size: 16px;
-        }
-
-        .topbar-right {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-
-        .page-wrapper {
-          max-width: 1450px;
-          margin: auto;
-          padding: 35px;
-        }
-
-        .page-content { display: grid; gap: 27px; }
-
-        .section-title {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 20px;
-        }
-
-        .eyebrow {
-          color: #2563EB;
-          font-size: 10px;
-          letter-spacing: 1.5px;
-          font-weight: 800;
-          margin-bottom: 8px;
-        }
-
-        .section-title h1 {
-          font-size: 29px;
-          margin: 0;
-          font-weight: 800;
-          letter-spacing: -.7px;
-        }
-
-        .section-title p {
-          color: #7B8A9B;
-          font-size: 13px;
-          margin: 8px 0 0;
-        }
-
-        .welcome-card {
-          min-height: 225px;
-          border-radius: 19px;
-          background: linear-gradient(110deg, #10243A, #1D4770);
-          color: white;
-          padding: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          overflow: hidden;
-        }
-
-        .welcome-label {
-          font-size: 10px;
-          letter-spacing: 2px;
-          color: #8BC8FF;
-          font-weight: 800;
-        }
-
-        .welcome-card h2 { font-size: 29px; margin: 13px 0 8px; }
-
-        .welcome-card p {
-          max-width: 480px;
-          color: #C1D2E4;
-          font-size: 13px;
-          line-height: 1.7;
-        }
-
-        .welcome-card button {
-          margin-top: 12px;
-          padding: 11px 16px;
-          border: 0;
-          border-radius: 9px;
-          background: white;
-          color: #10243A;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-weight: 700;
-          font-size: 12px;
-        }
-
-        .welcome-icon { color: #8BC8FF; opacity: .65; padding: 20px; }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 15px;
-        }
-
-        .stat-card {
-          min-height: 100px;
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 14px;
-          padding: 18px;
-          display: flex;
-          align-items: center;
-          gap: 13px;
-        }
-
-        .stat-card strong { display: block; font-size: 23px; font-weight: 800; }
-        .stat-card span { display: block; font-size: 11px; color: #8391A2; margin-top: 5px; }
-
-        .icon-tile {
-          width: 45px;
-          height: 45px;
-          display: grid;
-          place-items: center;
-          border-radius: 12px;
-          flex-shrink: 0;
-        }
-
-        .content-section { display: grid; gap: 17px; }
-
-        .section-heading {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-        }
-
-        .section-heading h2 { font-size: 18px; margin: 0; }
-        .section-heading p { color: #8391A2; font-size: 12px; margin: 5px 0 0; }
-
-        .tools-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 16px;
-        }
-
-        .tool-card {
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 15px;
-          text-align: left;
-          padding: 21px;
-          transition: .2s;
-        }
-
-        .tool-card:hover, .subject-card:hover, .admin-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 12px 25px #172B4310;
-        }
-
-        .tool-card h3 { font-size: 15px; margin: 17px 0 7px; }
-
-        .tool-card p {
-          font-size: 12px;
-          color: #8391A2;
-          line-height: 1.6;
-          min-height: 38px;
-        }
-
-        .tool-arrow {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          margin-top: 17px;
-          color: #2563EB;
-          font-size: 12px;
-          font-weight: 700;
-        }
-
-        .text-button {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          border: 0;
-          background: transparent;
-          color: #2563EB;
-          font-size: 12px;
-          font-weight: 700;
-        }
-
-        .history-list, .lesson-list { display: grid; gap: 10px; }
-
-        .history-item, .lesson-card {
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 12px;
-          padding: 13px 16px;
-          display: flex;
-          align-items: center;
-          gap: 13px;
-        }
-
-        .history-info, .lesson-info { flex: 1; min-width: 0; }
-
-        .history-info strong, .lesson-info h3 {
-          display: block;
-          font-size: 13px;
-          margin: 0;
-        }
-
-        .history-info span, .lesson-info p {
-          display: block;
-          font-size: 11px;
-          color: #8391A2;
-          margin: 5px 0 0;
-        }
-
-        .history-date { color: #8391A2; font-size: 11px; }
-
-        .filter-panel {
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 14px;
-          padding: 17px;
-          display: grid;
-          gap: 13px;
-        }
-
-        .search-box {
-          height: 43px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          border: 1px solid #E4EAF1;
-          border-radius: 9px;
-          padding: 0 12px;
-          color: #8391A2;
-        }
-
-        .search-box input {
-          width: 100%;
-          border: 0;
-          outline: none;
-          color: #172B43;
-          background: transparent;
-          font-size: 12px;
-        }
-
-        .filters-row {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-        }
-
-        .filters-row select, .field input, .field select,
-        .field textarea {
-          width: 100%;
-          min-height: 42px;
-          border: 1px solid #E2E8F0;
-          border-radius: 9px;
-          padding: 10px 12px;
-          background: white;
-          color: #172B43;
-          outline: none;
-          font-size: 12px;
-        }
-
-        .subjects-grid, .exams-grid, .admin-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 15px;
-        }
-
-        .subject-card, .exam-card, .admin-card {
-          position: relative;
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 14px;
-          padding: 19px;
-          transition: .2s;
-        }
-
-        .subject-main {
-          display: block;
-          width: 100%;
-          border: 0;
-          background: transparent;
-          text-align: left;
-          padding: 0;
-          color: inherit;
-        }
-
-        .subject-main h3, .exam-card h3, .admin-card h3 {
-          font-size: 15px;
-          margin: 14px 0 6px;
-        }
-
-        .subject-main p, .exam-card p, .admin-card p {
-          font-size: 11px;
-          color: #8391A2;
-          margin: 0 0 10px;
-        }
-
-        .subject-main > span {
-          font-size: 10px;
-          color: #2563EB;
-          font-weight: 700;
-        }
-
-        .subject-footer {
-          border-top: 1px solid #EDF1F5;
-          padding-top: 12px;
-          margin-top: 14px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          color: #2563EB;
-          font-size: 11px;
-          font-weight: 700;
-        }
-
-        .delete-subject, .delete-exam {
-          border: 0;
-          background: #FEECEC;
-          color: #DC2626;
-          border-radius: 8px;
-          padding: 8px;
-        }
-
-        .delete-subject { position: absolute; top: 17px; right: 17px; }
-
-        .primary-button, .outline-button {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          border-radius: 9px;
-          padding: 11px 14px;
-          font-size: 12px;
-          font-weight: 700;
-          text-decoration: none;
-          white-space: nowrap;
-        }
-
-        .primary-button {
-          border: 1px solid #2563EB;
-          background: #2563EB;
-          color: white;
-        }
-
-        .primary-button:hover { background: #1D4ED8; }
-
-        .outline-button {
-          border: 1px solid #DCE5EF;
-          background: white;
-          color: #2563EB;
-        }
-
-        .outline-button:hover { background: #EFF6FF; }
-
-        .icon-button {
-          width: 37px;
-          height: 37px;
-          display: inline-grid;
-          place-items: center;
-          border: 1px solid #E7EDF4;
-          border-radius: 9px;
-          background: white;
-          color: #526579;
-        }
-
-        .danger { color: #DC2626; }
-
-        .exam-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .exam-year { font-size: 10px; color: #8391A2; }
-
-        .exam-details { display: flex; gap: 7px; margin: 14px 0; }
-
-        .exam-details span {
-          padding: 6px 9px;
-          background: #F1F5F9;
-          border-radius: 6px;
-          font-size: 10px;
-          color: #526579;
-        }
-
-        .exam-actions { display: grid; gap: 9px; }
-
-        .no-correction {
-          font-size: 11px;
-          color: #8391A2;
-          text-align: center;
-        }
-
-        .delete-exam {
-          margin-top: 13px;
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-        }
-
-        .back-button {
-          border: 0;
-          background: transparent;
-          color: #2563EB;
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          font-size: 12px;
-          font-weight: 700;
-        }
-
-        .empty-state {
-          background: white;
-          border: 1px dashed #DCE5EF;
-          border-radius: 14px;
-          padding: 45px 20px;
-          text-align: center;
-        }
-
-        .empty-icon { color: #94A3B8; margin-bottom: 12px; }
-        .empty-state h3 { margin: 0; font-size: 15px; }
-        .empty-state p { font-size: 12px; color: #8391A2; }
-
-        .ai-container, .settings-card {
-          background: white;
-          border: 1px solid #E9EEF4;
-          border-radius: 16px;
-          padding: 25px;
-        }
-
-        .ai-intro {
-          display: flex;
-          gap: 15px;
-          align-items: center;
-          margin-bottom: 23px;
-        }
-
-        .ai-logo {
-          width: 55px;
-          height: 55px;
-          display: grid;
-          place-items: center;
-          background: #EAF1FF;
-          color: #2563EB;
-          border-radius: 15px;
-        }
-
-        .ai-intro h2 { font-size: 17px; margin: 0 0 6px; }
-        .ai-intro p { color: #8391A2; font-size: 12px; margin: 0; }
-
-        .upload-area {
-          min-height: 150px;
-          border: 2px dashed #CBD8E7;
-          border-radius: 13px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 9px;
-          color: #2563EB;
-          background: #F8FAFC;
-          cursor: pointer;
-        }
-
-        .upload-area strong { font-size: 13px; color: #172B43; }
-        .upload-area span { font-size: 11px; color: #8391A2; }
-
-        .ai-actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 9px;
-          margin: 18px 0;
-        }
-
-        .ai-action {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 13px;
-          border: 1px solid #E2E8F0;
-          border-radius: 9px;
-          background: white;
-          color: #526579;
-          font-size: 11px;
-          font-weight: 700;
-        }
-
-        .ai-action.selected {
-          background: #EFF6FF;
-          color: #2563EB;
-          border-color: #93C5FD;
-        }
-
-        .field { display: grid; gap: 7px; margin-bottom: 15px; }
-
-        .field > span {
-          color: #526579;
-          font-size: 11px;
-          font-weight: 700;
-        }
-
-        .field textarea { resize: vertical; min-height: 90px; }
-
-        .ai-submit { width: 100%; min-height: 46px; }
-
-        .ai-result {
-          margin-top: 25px;
-          border-top: 1px solid #E9EEF4;
-          padding-top: 23px;
-        }
-
-        .result-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-        }
-
-        .result-header h2 { font-size: 18px; margin: 0; }
-
-        .result-content {
-          white-space: pre-wrap;
-          line-height: 1.8;
-          font-size: 13px;
-          color: #334155;
-          background: #F8FAFC;
-          padding: 20px;
-          border-radius: 11px;
-          margin-top: 15px;
-          overflow-wrap: anywhere;
-        }
-
-        .admin-card { text-align: left; color: inherit; cursor: pointer; }
-
-        .admin-card > svg {
-          position: absolute;
-          right: 18px;
-          bottom: 20px;
-          color: #2563EB;
-        }
-
-        .settings-card { display: grid; }
-
-        .settings-row {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          padding: 17px 0;
-          border-bottom: 1px solid #EDF1F5;
-        }
-
-        .settings-row:last-child { border-bottom: 0; }
-        .settings-row > div:nth-child(2) { flex: 1; }
-        .settings-row strong { font-size: 13px; }
-        .settings-row p { font-size: 11px; color: #8391A2; margin: 5px 0 0; }
-
-        .upload-progress { margin: 12px 0 18px; }
-
-        .progress-label {
-          display: flex;
-          justify-content: space-between;
-          font-size: 12px;
-          color: #526579;
-          margin-bottom: 8px;
-        }
-
-        .progress-track {
-          width: 100%;
-          height: 9px;
-          background: #E5EAF1;
-          border-radius: 20px;
-          overflow: hidden;
-        }
-
-        .progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #2563EB, #06B6D4);
-          border-radius: 20px;
-          transition: width .2s ease;
-        }
-
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 100;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 18px;
-          background: #0F172A99;
-          overflow-y: auto;
-        }
-
-        .modal-card {
-          width: 100%;
-          max-width: 520px;
-          max-height: 90vh;
-          overflow-y: auto;
-          background: white;
-          border-radius: 16px;
-          padding: 23px;
-          box-shadow: 0 25px 80px #0003;
-        }
-
-        .modal-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 22px;
-        }
-
-        .modal-header h2 { font-size: 18px; margin: 0; }
-        .modal-form { display: grid; gap: 2px; }
-        .full-button { width: 100%; margin-top: 9px; }
-
-        .file-selected {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 11px;
-          color: #059669;
-          overflow-wrap: anywhere;
-        }
-
-        .separator-text {
-          text-align: center;
-          font-size: 10px;
-          font-weight: 800;
-          color: #94A3B8;
-          margin: 5px 0 13px;
-        }
-
-        .loading-screen {
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 15px;
-          background: #F5F7FB;
-        }
-
-        .loading-screen p { color: #8391A2; font-size: 12px; }
-
-        .spin { animation: spin 1s linear infinite; }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
-        .mobile-menu-button, .mobile-dropdown, .mobile-bottom-nav {
-          display: none;
-        }
-
-        .dark-mode {
-          background: #101D2C;
-          color: #E5EDF7;
-        }
-
-        .dark-mode .main-area,
-        .dark-mode .page-wrapper { background: #101D2C; }
-
-        .dark-mode .topbar,
-        .dark-mode .stat-card,
-        .dark-mode .tool-card,
-        .dark-mode .subject-card,
-        .dark-mode .exam-card,
-        .dark-mode .admin-card,
-        .dark-mode .history-item,
-        .dark-mode .lesson-card,
-        .dark-mode .filter-panel,
-        .dark-mode .ai-container,
-        .dark-mode .settings-card,
-        .dark-mode .empty-state {
-          background: #192A3C;
-          border-color: #2C4055;
-          color: #E5EDF7;
-        }
-
-        .dark-mode .section-title p,
-        .dark-mode .section-heading p,
-        .dark-mode .tool-card p,
-        .dark-mode .subject-main p,
-        .dark-mode .exam-card p,
-        .dark-mode .admin-card p,
-        .dark-mode .history-info span,
-        .dark-mode .lesson-info p {
-          color: #A9B8C8;
-        }
-
-        .dark-mode .search-box,
-        .dark-mode .filters-row select,
-        .dark-mode .field input,
-        .dark-mode .field select,
-        .dark-mode .field textarea,
-        .dark-mode .outline-button,
-        .dark-mode .icon-button {
-          background: #192A3C;
-          color: #E5EDF7;
-          border-color: #354A60;
-        }
-
-        .dark-mode .search-box input { color: white; }
-
-        .dark-mode .result-content {
-          background: #10243A;
-          color: #E5EDF7;
-        }
-
-        @media (max-width: 1050px) {
-          .stats-grid { grid-template-columns: repeat(2, 1fr); }
-
-          .subjects-grid, .exams-grid, .admin-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-
-          .page-wrapper { padding: 25px; }
-        }
-
-        @media (max-width: 700px) {
-          .sidebar { display: none; }
-
-          .topbar {
-            height: 65px;
-            padding: 0 15px;
-          }
-
-          .mobile-menu-button {
-            display: grid;
-            place-items: center;
-            width: 38px;
-            height: 38px;
-            border: 0;
-            border-radius: 9px;
-            background: #EFF6FF;
-            color: #2563EB;
-          }
-
-          .topbar-title { flex: 1; margin-left: 12px; }
-          .topbar-title span { font-size: 9px; }
-          .topbar-title strong { font-size: 13px; }
-          .topbar-right { gap: 8px; }
-
-          .topbar-avatar {
-            width: 32px;
-            height: 32px;
-          }
-
-          .page-wrapper { padding: 22px 15px 100px; }
-
-          .section-title {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .section-title h1 { font-size: 24px; }
-
-          .welcome-card {
-            padding: 23px;
-            min-height: 190px;
-          }
-
-          .welcome-card h2 { font-size: 23px; }
-          .welcome-icon { display: none; }
-
-          .stats-grid { gap: 10px; }
-
-          .stat-card {
-            padding: 13px;
-            min-height: 83px;
-            gap: 9px;
-          }
-
-          .stat-card .icon-tile {
-            width: 37px;
-            height: 37px;
-          }
-
-          .stat-card strong { font-size: 19px; }
-          .stat-card span { font-size: 10px; }
-
-          .tools-grid, .subjects-grid, .exams-grid, .admin-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .filters-row { grid-template-columns: 1fr; }
-
-          .history-item, .lesson-card { flex-wrap: wrap; }
-          .history-date { margin-left: auto; }
-          .lesson-info { min-width: 55%; }
-
-          .ai-container { padding: 17px; }
-
-          .ai-actions {
-            display: grid;
-            grid-template-columns: 1fr;
-          }
-
-          .mobile-dropdown {
-            display: grid;
-            position: absolute;
-            z-index: 50;
-            top: 60px;
-            left: 12px;
-            width: min(260px, calc(100vw - 24px));
-            background: white;
-            border: 1px solid #E5EAF0;
-            border-radius: 12px;
-            padding: 8px;
-            box-shadow: 0 15px 35px #0002;
-          }
-
-          .mobile-dropdown button {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            border: 0;
-            border-radius: 8px;
-            background: transparent;
-            color: #172B43;
-            text-align: left;
-            font-size: 12px;
-          }
-
-          .mobile-dropdown button:hover {
-            background: #EFF6FF;
-            color: #2563EB;
-          }
-
-          .mobile-bottom-nav {
-            position: fixed;
-            z-index: 40;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 67px;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            background: white;
-            border-top: 1px solid #E8EDF3;
-            padding-bottom: env(safe-area-inset-bottom);
-          }
-
-          .mobile-bottom-nav button {
-            border: 0;
-            background: transparent;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            color: #8391A2;
-            font-size: 9px;
-          }
-
-          .mobile-bottom-nav button.active {
-            color: #2563EB;
-            font-weight: 800;
-          }
-
-          .dark-mode .mobile-bottom-nav,
-          .dark-mode .mobile-dropdown {
-            background: #192A3C;
-            border-color: #354A60;
-          }
-
-          .dark-mode .mobile-dropdown button { color: #E5EDF7; }
-
-          .modal-card { padding: 18px; }
-        }
-
-        /* Empêche le clavier mobile de provoquer des champs instables */
-        input, textarea, select {
-          font-size: 16px;
-          max-width: 100%;
-        }
-
-        .field input:focus,
-        .field textarea:focus,
-        .field select:focus,
-        .search-box:focus-within {
-          border-color: #60A5FA;
-          box-shadow: 0 0 0 3px #2563EB18;
-        }
-
-        .modal-card {
-          overscroll-behavior: contain;
-          -webkit-overflow-scrolling: touch;
-        }
-
-        .field input, .field textarea {
-          scroll-margin-bottom: 120px;
-        }
-      `}</style>
+          );
+        })}
+      </nav>
     </main>
   );
-        }
+}
+
+/* =====================================================
+   STYLES DE DN MED STUDY
+===================================================== */
+
+const styles = `
+:root {
+  --primary: #2457d6;
+  --primary-dark: #1743ad;
+  --text: #172033;
+  --muted: #748096;
+  --border: #e8edf4;
+  --background: #f6f8fc;
+  --surface: #ffffff;
+  --sidebar: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: var(--background);
+  color: var(--text);
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--text);
+}
+
+.sidebar {
+  width: 255px;
+  position: fixed;
+  inset: 0 auto 0 0;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 25px 17px 17px;
+  z-index: 20;
+}
+
+.brand, .mobile-dropdown-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 38px;
+}
+
+.brand strong, .mobile-dropdown-title strong {
+  display: block;
+  font-size: 14px;
+  letter-spacing: .5px;
+}
+
+.brand small, .mobile-dropdown-title small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.brand-mark {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: white;
+  font-size: 16px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #2762e8, #123a9c);
+  box-shadow: 0 5px 15px #2457d633;
+}
+
+.sidebar-section-label, .mobile-menu-label {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  color: #98a2b3;
+  font-weight: 800;
+  margin: 0 0 12px 9px;
+}
+
+.sidebar-nav, .sidebar-tools {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 30px;
+}
+
+.nav-item, .tool-nav, .mobile-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  color: #647087;
+  text-align: left;
+  padding: 12px 13px;
+  border-radius: 10px;
+  font-size: 13px;
+  transition: .2s;
+}
+
+.nav-item:hover, .tool-nav:hover, .mobile-nav-item:hover {
+  background: #f0f4fc;
+  color: var(--primary);
+}
+
+.nav-item.active, .tool-nav.active, .mobile-nav-item.active {
+  background: #eaf0ff;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.nav-item span, .tool-nav span, .mobile-nav-item span {
+  flex: 1;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  display: grid;
+  gap: 7px;
+}
+
+.user-card {
+  border-top: 1px solid var(--border);
+  padding: 17px 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.user-avatar, .topbar-avatar {
+  width: 37px;
+  height: 37px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #eaf0ff;
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.user-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.user-info strong, .user-info small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-info strong {
+  font-size: 12px;
+}
+
+.user-info small {
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.logout-button, .icon-button {
+  border: 0;
+  background: transparent;
+  color: #8490a3;
+  padding: 8px;
+  border-radius: 9px;
+}
+
+.logout-button:hover, .icon-button:hover {
+  color: #dc3545;
+  background: #fff0f1;
+}
+
+.main-area {
+  margin-left: 255px;
+  min-height: 100vh;
+}
+
+.topbar {
+  height: 70px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 35px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.topbar-left, .topbar-right, .breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.breadcrumb {
+  color: #9aa4b5;
+  font-size: 12px;
+}
+
+.breadcrumb strong {
+  color: var(--text);
+}
+
+.topbar-user {
+  color: #6e7a90;
+  font-size: 12px;
+}
+
+.mobile-menu-button {
+  display: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.page-content {
+  max-width: 1450px;
+  margin: 0 auto;
+  padding: 32px 35px 60px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 35px 0 20px;
+}
+
+.section-title h1 {
+  font-size: 27px;
+  margin: 5px 0 8px;
+  letter-spacing: -.7px;
+}
+
+.section-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  color: var(--primary);
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  font-weight: 800;
+}
+
+.welcome-banner {
+  min-height: 230px;
+  padding: 35px 40px;
+  border-radius: 19px;
+  background: linear-gradient(115deg, #123a9c, #2865e8);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  position: relative;
+}
+
+.welcome-content {
+  max-width: 600px;
+  position: relative;
+  z-index: 1;
+}
+
+.welcome-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  opacity: .85;
+  font-weight: 700;
+}
+
+.welcome-banner h1 {
+  font-size: 30px;
+  margin: 18px 0 10px;
+}
+
+.welcome-banner p {
+  max-width: 520px;
+  line-height: 1.7;
+  font-size: 13px;
+  opacity: .85;
+}
+
+.welcome-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 9px;
+  background: white;
+  color: #1b4bb7;
+  font-weight: 700;
+  font-size: 12px;
+  margin-top: 12px;
+}
+
+.welcome-decoration {
+  opacity: .18;
+  margin-right: 50px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  margin: 25px 0 38px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface);
+  padding: 19px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+}
+
+.stat-icon, .icon-tile {
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  flex-shrink: 0;
+}
+
+.stat-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.stat-icon.blue { color: #2563eb; background: #eaf1ff; }
+.stat-icon.purple { color: #7c3aed; background: #f1eafe; }
+.stat-icon.orange { color: #ea8a18; background: #fff3df; }
+.stat-icon.green { color: #059669; background: #e3f8ef; }
+
+.stat-card strong, .stat-card span {
+  display: block;
+}
+
+.stat-card strong {
+  font-size: 23px;
+  margin-bottom: 4px;
+}
+
+.stat-card span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 17px;
+  margin-bottom: 35px;
+}
+
+.tool-card {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  background: var(--surface);
+  transition: .2s;
+}
+
+.tool-card:hover, .course-card:hover, .admin-action-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px #1d35570c;
+}
+
+.icon-tile {
+  width: 48px;
+  height: 48px;
+}
+
+.tool-card h3 {
+  font-size: 15px;
+  margin: 17px 0 7px;
+}
+
+.tool-card p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  min-height: 38px;
+}
+
+.tool-card-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 18px;
+}
+
+.course-grid, .exam-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.course-card, .exam-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 19px;
+  transition: .2s;
+  min-width: 0;
+}
+
+.course-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.course-file-icon, .exam-card-icon {
+  display: grid;
+  place-items: center;
+  color: #2563eb;
+  background: #eaf1ff;
+  border-radius: 10px;
+}
+
+.course-file-icon {
+  width: 43px;
+  height: 43px;
+}
+
+.course-type {
+  font-size: 9px;
+  color: #8793a7;
+  letter-spacing: .8px;
+  font-weight: 800;
+}
+
+.course-card h3 {
+  font-size: 14px;
+  margin: 17px 0 6px;
+}
+
+.course-card p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.course-meta, .exam-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.course-meta span, .exam-meta span {
+  font-size: 10px;
+  background: #f0f3f9;
+  color: #66738a;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+
+.course-card-bottom {
+  border-top: 1px solid var(--border);
+  margin-top: 17px;
+  padding-top: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.course-card-bottom small {
+  color: #98a2b3;
+  font-size: 10px;
+}
+
+.course-card-bottom button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.course-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.primary-button, .secondary-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9px;
+  padding: 11px 15px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.primary-button {
+  color: white;
+  background: var(--primary);
+}
+
+.primary-button:hover {
+  background: var(--primary-dark);
+}
+
+.primary-button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.primary-button.small, .secondary-button.small {
+  padding: 8px 11px;
+  font-size: 10px;
+}
+
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 14px;
+  margin: 22px 0 17px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 220px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #929daf;
+}
+
+.search-box input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  padding: 11px 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.search-box button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.filter-panel select {
+  min-width: 145px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  color: #647087;
+  background: var(--surface);
+  font-size: 11px;
+}
+
+.reset-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.subject-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 15px 0 20px;
+}
+
+.subject-chip {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 13px;
+  background: var(--surface);
+  color: #69758b;
+  font-size: 11px;
+}
+
+.subject-chip.active {
+  background: #eaf0ff;
+  border-color: #cbd9ff;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.empty-state {
+  background: var(--surface);
+  border: 1px dashed #d9e0eb;
+  border-radius: 14px;
+  padding: 45px 20px;
+  text-align: center;
+  margin: 20px 0;
+}
+
+.empty-icon {
+  color: #9aa8bd;
+  margin-bottom: 13px;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.empty-state p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.revision-intro {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  background: #edf2ff;
+  border-radius: 14px;
+  margin: 25px 0;
+}
+
+.revision-intro-icon {
+  color: var(--primary);
+}
+
+.revision-intro h2 {
+  margin: 0 0 7px;
+  font-size: 18px;
+}
+
+.revision-intro p {
+  margin: 0;
+  color: #65738b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.history-list {
+  display: grid;
+  gap: 9px;
+}
+
+.history-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  text-align: left;
+  color: var(--text);
+}
+
+.history-icon {
+  width: 39px;
+  height: 39px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #2563eb;
+  background: #eaf1ff;
+}
+
+.history-info {
+  flex: 1;
+}
+
+.history-info strong, .history-info small {
+  display: block;
+}
+
+.history-info strong {
+  font-size: 12px;
+}
+
+.history-info small {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+.exam-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.exam-card-icon {
+  width: 45px;
+  height: 45px;
+  flex-shrink: 0;
+}
+
+.exam-card-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.exam-card h3 {
+  margin: 3px 0 6px;
+  font-size: 14px;
+}
+
+.exam-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.exam-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.ai-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  margin-top: 25px;
+  align-items: start;
+}
+
+.ai-main-card, .ai-side-card, .settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 23px;
+}
+
+.ai-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.ai-heading-icon, .ai-side-icon {
+  width: 45px;
+  height: 45px;
+  display: grid;
+  place-items: center;
+  color: #7c3aed;
+  background: #f1eafe;
+  border-radius: 12px;
+}
+
+.ai-card-heading h2 {
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+
+.ai-card-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ai-tool-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  margin: 25px 0;
+}
+
+.ai-tool-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 12px 9px;
+  color: #66738a;
+  font-size: 10px;
+}
+
+.ai-tool-option span {
+  flex: 1;
+}
+
+.ai-tool-option.selected {
+  border-color: #9db7ff;
+  background: #eef3ff;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 2px dashed #cbd6e7;
+  border-radius: 13px;
+  padding: 30px 15px;
+  text-align: center;
+  cursor: pointer;
+  background: #fafcff;
+}
+
+.upload-zone input {
+  display: none;
+}
+
+.upload-zone-icon {
+  color: var(--primary);
+  background: #eaf1ff;
+  border-radius: 13px;
+  padding: 13px;
+}
+
+.upload-zone strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.upload-zone span, .upload-zone small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ai-submit {
+  width: 100%;
+  margin-top: 17px;
+}
+
+.ai-side-card h3 {
+  font-size: 15px;
+  margin: 15px 0 8px;
+}
+
+.ai-side-card p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.ai-side-divider {
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+.ai-side-card h4 {
+  font-size: 12px;
+}
+
+.mini-history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 9px 0;
+  color: #65738b;
+  font-size: 10px;
+  text-align: left;
+}
+
+.mini-history-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-result {
+  margin-top: 23px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.ai-result-header {
+  padding: 13px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8faff;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-result-header h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.ai-result-content {
+  padding: 17px;
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-card {
+  margin: 18px 0;
+}
+
+.settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 18px;
+}
+
+.settings-icon {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  background: #eaf1ff;
+  color: var(--primary);
+  border-radius: 11px;
+}
+
+.settings-heading h3 {
+  margin: 0 0 5px;
+  font-size: 14px;
+}
+
+.settings-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.settings-row > span {
+  color: var(--muted);
+}
+
+.settings-row strong {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.settings-row small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.toggle-switch {
+  width: 45px;
+  height: 25px;
+  border: 0;
+  border-radius: 20px;
+  padding: 3px;
+  background: #cbd3df;
+}
+
+.toggle-switch span {
+  display: block;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: white;
+  transition: .2s;
+}
+
+.toggle-switch.enabled {
+  background: var(--primary);
+}
+
+.toggle-switch.enabled span {
+  transform: translateX(20px);
+}
+
+.settings-logout {
+  margin-top: 4px;
+}
+
+.admin-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 25px 0;
+}
+
+.admin-action-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 21px;
+  text-align: left;
+  transition: .2s;
+}
+
+.admin-action-icon {
+  width: 45px;
+  height: 45px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+}
+
+.admin-action-icon.purple { color: #7c3aed; background: #f1eafe; }
+.admin-action-icon.blue { color: #2563eb; background: #eaf1ff; }
+.admin-action-icon.orange { color: #ea8a18; background: #fff3df; }
+
+.admin-action-card h3 {
+  font-size: 14px;
+  margin: 17px 0 7px;
+}
+
+.admin-action-card p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+  min-height: 38px;
+}
+
+.admin-action-card span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 13px;
+}
+
+.admin-summary > div {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 18px;
+  border-radius: 11px;
+}
+
+.admin-summary strong, .admin-summary span {
+  display: block;
+}
+
+.admin-summary strong {
+  font-size: 23px;
+}
+
+.admin-summary span {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #10182899;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.modal-card {
+  width: min(100%, 540px);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 15px;
+  padding: 22px;
+  box-shadow: 0 20px 60px #0003;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modal-form {
+  display: grid;
+  gap: 15px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.field input, .field select, .field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 12px;
+  outline: none;
+  font-size: 12px;
+}
+
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: #7da0f4;
+  box-shadow: 0 0 0 3px #2457d615;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.full-button {
+  width: 100%;
+  margin-top: 5px;
+}
+
+.file-selected {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #059669;
+  overflow-wrap: anywhere;
+}
+
+.form-separator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #9aa4b5;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.form-separator::before, .form-separator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.upload-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.progress-track {
+  height: 8px;
+  background: #e9eef6;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 20px;
+  background: var(--primary);
+  transition: width .2s;
+}
+
+.loading-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  background: var(--background);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.mobile-bottom-nav, .mobile-dropdown, .mobile-menu-backdrop {
+  display: none;
+}
+
+.dark-mode {
+  --text: #edf2ff;
+  --muted: #a5b0c4;
+  --border: #29364c;
+  --background: #101827;
+  --surface: #182337;
+  --sidebar: #182337;
+}
+
+.dark-mode .topbar,
+.dark-mode .sidebar,
+.dark-mode .course-card,
+.dark-mode .tool-card,
+.dark-mode .stat-card,
+.dark-mode .settings-card,
+.dark-mode .ai-main-card,
+.dark-mode .ai-side-card,
+.dark-mode .modal-card,
+.dark-mode .admin-action-card,
+.dark-mode .admin-summary > div {
+  background: var(--surface);
+}
+
+.dark-mode .search-box input,
+.dark-mode .filter-panel select,
+.dark-mode .field input,
+.dark-mode .field select,
+.dark-mode .field textarea {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.dark-mode .revision-intro {
+  background: #1b2e50;
+}
+
+.dark-mode .revision-intro p {
+  color: #bac7df;
+}
+
+.dark-mode .ai-result-header {
+  background: #1b2b43;
+}
+
+.dark-mode .upload-zone {
+  background: #1a2940;
+}
+
+.dark-mode .subject-chip,
+.dark-mode .secondary-button {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .course-grid, .exam-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ai-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-side-card {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar {
+    display: none;
+  }
+
+  .main-area {
+    margin-left: 0;
+    padding-bottom: 75px;
+  }
+
+  .topbar {
+    height: 61px;
+    padding: 0 15px;
+  }
+
+  .mobile-menu-button {
+    display: grid;
+    place-items: center;
+    padding: 7px;
+  }
+
+  .breadcrumb {
+    font-size: 10px;
+    gap: 5px;
+  }
+
+  .topbar-user {
+    display: none;
+  }
+
+  .topbar-avatar {
+    width: 33px;
+    height: 33px;
+  }
+
+  .page-content {
+    padding: 22px 15px 35px;
+  }
+
+  .welcome-banner {
+    min-height: 220px;
+    padding: 25px 20px;
+    border-radius: 15px;
+  }
+
+  .welcome-banner h1 {
+    font-size: 24px;
+  }
+
+  .welcome-banner p {
+    font-size: 12px;
+  }
+
+  .welcome-decoration {
+    position: absolute;
+    right: -45px;
+    bottom: 15px;
+    margin: 0;
+  }
+
+  .welcome-decoration svg {
+    width: 125px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 9px;
+    margin: 17px 0 28px;
+  }
+
+  .stat-card {
+    padding: 12px 9px;
+    gap: 9px;
+  }
+
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .stat-icon svg {
+    width: 18px;
+  }
+
+  .stat-card strong {
+    font-size: 18px;
+  }
+
+  .stat-card span {
+    font-size: 9px;
+  }
+
+  .section-title {
+    align-items: flex-start;
+    margin: 27px 0 15px;
+  }
+
+  .section-title h1 {
+    font-size: 22px;
+  }
+
+  .section-title p {
+    font-size: 11px;
+  }
+
+  .section-title > .primary-button {
+    padding: 9px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .tools-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .tool-card {
+    padding: 16px;
+  }
+
+  .tool-card h3 {
+    margin-top: 11px;
+  }
+
+  .tool-card p {
+    min-height: 0;
+  }
+
+  .course-grid, .exam-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-panel {
+    padding: 10px;
+  }
+
+  .search-box {
+    min-width: 100%;
+  }
+
+  .filter-panel select {
+    flex: 1;
+    min-width: calc(50% - 6px);
+  }
+
+  .reset-filter {
+    padding: 7px;
+  }
+
+  .revision-intro {
+    padding: 17px;
+    gap: 12px;
+  }
+
+  .revision-intro h2 {
+    font-size: 15px;
+  }
+
+  .revision-intro p {
+    font-size: 11px;
+  }
+
+  .ai-main-card, .ai-side-card, .settings-card {
+    padding: 16px;
+  }
+
+  .ai-tool-options {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin: 18px 0;
+  }
+
+  .ai-tool-option {
+    padding: 12px;
+    font-size: 11px;
+  }
+
+  .admin-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-summary {
+    gap: 7px;
+  }
+
+  .admin-summary > div {
+    padding: 12px 9px;
+  }
+
+  .admin-summary strong {
+    font-size: 19px;
+  }
+
+  .admin-summary span {
+    font-size: 9px;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 18px 18px 0 0;
+    padding: 20px 16px 30px;
+  }
+
+  .mobile-menu-backdrop {
+    display: block;
+    position: fixed;
+    inset: 61px 0 0;
+    z-index: 29;
+    background: #10182866;
+  }
+
+  .mobile-dropdown {
+    display: block;
+    position: fixed;
+    top: 61px;
+    left: 0;
+    width: min(85vw, 330px);
+    max-height: calc(100vh - 61px);
+    overflow-y: auto;
+    background: var(--surface);
+    padding: 20px 15px 25px;
+    z-index: 30;
+    box-shadow: 10px 15px 35px #10182825;
+    border-radius: 0 0 15px 0;
+  }
+
+  .mobile-dropdown-title {
+    margin-bottom: 20px;
+  }
+
+  .mobile-nav-item {
+    padding: 13px 11px;
+    font-size: 12px;
+  }
+
+  .mobile-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 13px 0;
+  }
+
+  .mobile-menu-label {
+    margin-top: 10px;
+  }
+
+  .mobile-logout {
+    color: #dc3545;
+  }
+
+  .mobile-bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 65px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 25;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    border: 0;
+    background: transparent;
+    color: #8490a3;
+    font-size: 9px;
+  }
+
+  .bottom-nav-item.active {
+    color: var(--primary);
+    font-weight: 800;
+  }
+}
+
+@media (max-width: 380px) {
+  .welcome-banner h1 {
+    font-size: 21px;
+  }
+
+  .stat-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .section-title > .primary-button {
+    max-width: 120px;
+    white-space: normal;
+  }
+}
+`;
+
+if (typeof document !== "undefined") {
+  const styleId = "dn-med-study-global-styles";
+
+  let styleElement = document.getElementById(styleId);
+
+  if (!styleElement) {
+    styleElement = document.createElement("style");
+    styleElement.id = styleId;
+    document.head.appendChild(styleElement);
+  }
+
+  styleElement.textContent = styles;
+                    }
