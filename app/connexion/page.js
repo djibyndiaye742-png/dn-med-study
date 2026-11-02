@@ -1,19 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile
-} from "firebase/auth";
-import {
-  doc,
-  setDoc,
-  serverTimestamp
-} from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { useRouter } from "next/navigation";
+import { supabase } from "../../lib/supabase";
 
 export default function Connexion() {
+  const router = useRouter();
+
   const [inscription, setInscription] = useState(true);
   const [nom, setNom] = useState("");
   const [prenom, setPrenom] = useState("");
@@ -25,67 +18,105 @@ export default function Connexion() {
 
   async function gererCompte(e) {
     e.preventDefault();
+
     setMessage("");
     setChargement(true);
 
     try {
+      const adresse = email.trim().toLowerCase();
+
       if (inscription) {
         if (password !== confirmation) {
           throw new Error("Les mots de passe ne correspondent pas.");
         }
 
         if (password.length < 6) {
-          throw new Error("Le mot de passe doit contenir au moins 6 caractères.");
+          throw new Error(
+            "Le mot de passe doit contenir au moins 6 caractères."
+          );
         }
 
-        const resultat = await createUserWithEmailAndPassword(
-          auth,
-          email.trim(),
-          password
-        );
+        const nomComplet = `${prenom.trim()} ${nom.trim()}`.trim();
 
-        const nomComplet = `${prenom.trim()} ${nom.trim()}`;
-
-        await updateProfile(resultat.user, {
-          displayName: nomComplet
+        const { data, error } = await supabase.auth.signUp({
+          email: adresse,
+          password,
+          options: {
+            data: {
+              nom: nom.trim(),
+              prenom: prenom.trim(),
+              nomComplet,
+            },
+          },
         });
 
-        await setDoc(doc(db, "users", resultat.user.uid), {
-          uid: resultat.user.uid,
-          nom: nom.trim(),
-          prenom: prenom.trim(),
-          nomComplet,
-          email: email.trim(),
-          createdAt: serverTimestamp()
-        });
+        if (error) throw error;
 
+        if (!data.user) {
+          throw new Error("Impossible de créer le compte.");
+        }
+
+        if (!data.session) {
+          setMessage(
+            "Compte créé. Vérifie ta boîte e-mail pour confirmer ton adresse avant de te connecter."
+          );
+          setInscription(false);
+          setChargement(false);
+          return;
+        }
+
+        const { error: profileError } = await supabase
+          .from("users")
+          .upsert(
+            {
+              id: data.user.id,
+              uid: data.user.id,
+              nom: nom.trim(),
+              prenom: prenom.trim(),
+              nomComplet,
+              email: adresse,
+            },
+            { onConflict: "id" }
+          );
+
+        if (profileError) {
+          console.error("Erreur profil :", profileError);
+          throw new Error(
+            "Compte créé, mais le profil n'a pas pu être enregistré. Vérifie la table users et ses politiques RLS."
+          );
+        }
       } else {
-        await signInWithEmailAndPassword(
-          auth,
-          email.trim(),
-          password
-        );
+        const { error } = await supabase.auth.signInWithPassword({
+          email: adresse,
+          password,
+        });
+
+        if (error) throw error;
       }
 
-      window.location.href = "/";
+      router.replace("/");
+      router.refresh();
+
     } catch (error) {
       console.error("Erreur DN Med Study :", error);
 
       const erreurs = {
-        "auth/email-already-in-use": "Cette adresse e-mail est déjà utilisée.",
-        "auth/invalid-email": "Adresse e-mail invalide.",
-        "auth/invalid-credential": "E-mail ou mot de passe incorrect.",
-        "auth/weak-password": "Mot de passe trop faible.",
-        "auth/network-request-failed": "Vérifiez votre connexion Internet.",
-        "permission-denied": "Firebase refuse l'enregistrement du profil. Vérifiez les règles Firestore.",
-        "auth/operation-not-allowed": "Activez la connexion par e-mail dans Firebase."
+        "Invalid login credentials":
+          "E-mail ou mot de passe incorrect.",
+        "Email not confirmed":
+          "Confirme ton adresse e-mail avant de te connecter.",
+        "User already registered":
+          "Cette adresse e-mail possède déjà un compte.",
+        "Password should be at least 6 characters":
+          "Le mot de passe doit contenir au moins 6 caractères.",
       };
 
       setMessage(
-        erreurs[error.code] ||
+        erreurs[error.message] ||
         error.message ||
         "Une erreur inconnue est survenue."
       );
+
     } finally {
       setChargement(false);
     }
@@ -104,33 +135,51 @@ export default function Connexion() {
 
         {inscription && (
           <>
-            <input required placeholder="Prénom"
+            <input
+              required
+              placeholder="Prénom"
               value={prenom}
-              onChange={e => setPrenom(e.target.value)}
-              style={input} />
+              onChange={(e) => setPrenom(e.target.value)}
+              style={input}
+            />
 
-            <input required placeholder="Nom"
+            <input
+              required
+              placeholder="Nom"
               value={nom}
-              onChange={e => setNom(e.target.value)}
-              style={input} />
+              onChange={(e) => setNom(e.target.value)}
+              style={input}
+            />
           </>
         )}
 
-        <input required type="email" placeholder="Adresse e-mail"
+        <input
+          required
+          type="email"
+          placeholder="Adresse e-mail"
           value={email}
-          onChange={e => setEmail(e.target.value)}
-          style={input} />
+          onChange={(e) => setEmail(e.target.value)}
+          style={input}
+        />
 
-        <input required type="password" placeholder="Mot de passe"
+        <input
+          required
+          type="password"
+          placeholder="Mot de passe"
           value={password}
-          onChange={e => setPassword(e.target.value)}
-          style={input} />
+          onChange={(e) => setPassword(e.target.value)}
+          style={input}
+        />
 
         {inscription && (
-          <input required type="password" placeholder="Confirmer le mot de passe"
+          <input
+            required
+            type="password"
+            placeholder="Confirmer le mot de passe"
             value={confirmation}
-            onChange={e => setConfirmation(e.target.value)}
-            style={input} />
+            onChange={(e) => setConfirmation(e.target.value)}
+            style={input}
+          />
         )}
 
         {message && (
@@ -139,20 +188,31 @@ export default function Connexion() {
           </p>
         )}
 
-        <button disabled={chargement} type="submit" style={button}>
-          {chargement ? "Patientez..." :
-            inscription ? "Créer mon compte" : "Se connecter"}
+        <button
+          disabled={chargement}
+          type="submit"
+          style={button}
+        >
+          {chargement
+            ? "Patientez..."
+            : inscription
+            ? "Créer mon compte"
+            : "Se connecter"}
         </button>
 
         <p style={{ textAlign: "center" }}>
-          {inscription ? "Déjà inscrit ?" : "Pas encore de compte ?"}
-          {" "}
-          <button type="button"
+          {inscription
+            ? "Déjà inscrit ?"
+            : "Pas encore de compte ?"}{" "}
+
+          <button
+            type="button"
             onClick={() => {
               setInscription(!inscription);
               setMessage("");
             }}
-            style={switchButton}>
+            style={switchButton}
+          >
             {inscription ? "Se connecter" : "S'inscrire"}
           </button>
         </p>
@@ -167,7 +227,7 @@ const page = {
   justifyContent: "center",
   alignItems: "center",
   padding: 20,
-  background: "#f1f5f9"
+  background: "#f1f5f9",
 };
 
 const form = {
@@ -175,7 +235,7 @@ const form = {
   maxWidth: 420,
   background: "white",
   padding: 28,
-  borderRadius: 16
+  borderRadius: 16,
 };
 
 const input = {
@@ -184,7 +244,7 @@ const input = {
   marginTop: 12,
   border: "1px solid #cbd5e1",
   borderRadius: 8,
-  fontSize: 15
+  fontSize: 15,
 };
 
 const button = {
@@ -195,12 +255,12 @@ const button = {
   color: "white",
   border: "none",
   borderRadius: 8,
-  fontWeight: "bold"
+  fontWeight: "bold",
 };
 
 const switchButton = {
   border: "none",
   background: "none",
   color: "#0f766e",
-  fontWeight: "bold"
+  fontWeight: "bold",
 };
