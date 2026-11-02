@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { firebaseAdminAuth } from "@/lib/firebase-admin";
+import { firebaseAdminAuth } from "../../../lib/firebase-admin";
 
 
 export const runtime = "nodejs";
