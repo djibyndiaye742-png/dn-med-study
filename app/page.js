@@ -2124,95 +2124,119 @@ const response = await fetch("/api/ia", {
             ========================================= */}
 
             {active === "settings" && (
-              <>
-                <SectionTitle
-                  eyebrow="PERSONNALISATION"
-                  title="Paramètres"
-                  description="Gère ton compte et tes préférences."
-                />
+  <>
+    <SectionTitle
+      eyebrow="PERSONNALISATION"
+      title="Paramètres"
+      description="Gère ton compte et tes préférences."
+    />
 
-                <div className="settings-card">
+    <div className="settings-card">
 
-                  <div className="settings-row">
-                    <IconTile
-                      icon={UserRound}
-                      color="#2563EB"
-                      background="#EAF1FF"
-                    />
+      {/* MON COMPTE */}
+      <div className="settings-row">
+        <IconTile
+          icon={UserRound}
+          color="#2563EB"
+          background="#EAF1FF"
+        />
 
-                    <div>
-                      <strong>Mon compte</strong>
+        <div>
+          <strong>Mon compte</strong>
+          <p>
+            {user?.email || "Aucun compte connecté"}
+          </p>
+        </div>
+      </div>
 
-                      <p>{user?.email}</p>
-                    </div>
-                  </div>
+      {/* STATUT DU COMPTE */}
+      <div className="settings-row">
+        <IconTile
+          icon={ShieldCheck}
+          color="#059669"
+          background="#E7F8EF"
+        />
 
-                  <div className="settings-row">
-                    <IconTile
-                      icon={ShieldCheck}
-                      color="#059669"
-                      background="#E7F8EF"
-                    />
+        <div>
+          <strong>Statut du compte</strong>
+          <p>
+            {user
+              ? (isAdmin ? "Administrateur" : "Étudiant")
+              : "Visiteur"}
+          </p>
+        </div>
+      </div>
 
-                    <div>
-                      <strong>Statut du compte</strong>
+      {/* APPARENCE */}
+      <div className="settings-row">
+        <IconTile
+          icon={Eye}
+          color="#7C3AED"
+          background="#F1EAFE"
+        />
 
-                      <p>
-                        {isAdmin ? "Administrateur" : "Étudiant"}
-                      </p>
-                    </div>
-                  </div>
+        <div>
+          <strong>Apparence</strong>
+          <p>
+            {dark ? "Mode sombre" : "Mode clair"}
+          </p>
+        </div>
 
-                  <div className="settings-row">
-                    <IconTile
-                      icon={Eye}
-                      color="#7C3AED"
-                      background="#F1EAFE"
-                    />
+        <button
+          className="outline-button"
+          onClick={() => setDark(!dark)}
+        >
+          Changer
+        </button>
+      </div>
 
-                    <div>
-                      <strong>Apparence</strong>
+      {/* ACCÈS AU COMPTE */}
+      {user ? (
+        <div className="settings-row">
+          <IconTile
+            icon={LogOut}
+            color="#DC2626"
+            background="#FEECEC"
+          />
 
-                      <p>
-                        {dark ? "Mode sombre" : "Mode clair"}
-                      </p>
-                    </div>
+          <div>
+            <strong>Déconnexion</strong>
+            <p>Quitter ton espace personnel.</p>
+          </div>
 
-                    <button
-                      className="outline-button"
-                      onClick={() => setDark(!dark)}
-                    >
-                      Changer
-                    </button>
-                  </div>
+          <button
+            className="outline-button danger"
+            onClick={deconnexion}
+          >
+            <LogOut size={15} />
+            Déconnexion
+          </button>
+        </div>
+      ) : (
+        <div className="settings-row">
+          <IconTile
+            icon={UserRound}
+            color="#2563EB"
+            background="#EAF1FF"
+          />
 
-                  <div className="settings-row">
-                    <IconTile
-                      icon={LogOut}
-                      color="#DC2626"
-                      background="#FEECEC"
-                    />
+          <div>
+            <strong>Accès au compte</strong>
+            <p>Connecte-toi ou crée ton compte étudiant.</p>
+          </div>
 
-                    <div>
-                      <strong>Déconnexion</strong>
+          <button
+            className="primary-button"
+            onClick={() => window.location.href = "/connexion"}
+          >
+            Se connecter / S'inscrire
+          </button>
+        </div>
+      )}
 
-                      <p>
-                        Quitter ton espace personnel.
-                      </p>
-                    </div>
-
-                    <button
-                      className="outline-button danger"
-                      onClick={deconnexion}
-                    >
-                      <LogOut size={15} />
-                      Déconnexion
-                    </button>
-                  </div>
-
-                </div>
-              </>
-            )}
+    </div>
+  </>
+)}
 
           </div>
         </div>
