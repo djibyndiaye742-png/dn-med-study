@@ -1523,13 +1523,23 @@ function ouvrirCours(course) {
                             )}
                           </div>
 
-                          <button
-                            className="primary-button"
-                            onClick={() => ouvrirCours(course)}
-                          >
-                            <ExternalLink size={15} />
-                            Ouvrir
-                          </button>
+                          <div className="lesson-actions">
+  <button
+    className="primary-button"
+    onClick={() => ouvrirCours(course)}
+  >
+    <ExternalLink size={15} />
+    Ouvrir
+  </button>
+
+  <button
+    className="outline-button"
+    onClick={() => telechargerCours(course)}
+  >
+    <Download size={15} />
+    Télécharger
+  </button>
+</div>
 
                           {isAdmin && (
                             <button
