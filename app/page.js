@@ -841,15 +841,22 @@ export default function HomePage() {
 
   /* OUVRIR UN COURS */
 
-  function ouvrirCours(course) {
-    const url = getCourseUrl(course);
+function ouvrirCours(course) {
+  const url = getCourseUrl(course);
 
-    if (!url) {
-      return alert("Aucun document disponible.");
-    }
-
-    window.open(url, "_blank", "noopener,noreferrer");
+  if (!url) {
+    return alert("Aucun document disponible.");
   }
+
+  const lien = document.createElement("a");
+  lien.href = url;
+  lien.target = "_blank";
+  lien.rel = "noopener noreferrer";
+
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+}
 
   /* ASSISTANT IA */
 
