@@ -950,10 +950,24 @@ alert("Impossible de télécharger ce document. Réessaie.");
         formData.append("question", aiQuestion.trim());
       }
 
-      const response = await fetch("/api/ia", {
-        method: "POST",
-        body: formData
-      });
+      const {
+  data: { session },
+  error: sessionError
+} = await supabase.auth.getSession();
+
+if (sessionError || !session?.access_token) {
+  alert("Connecte-toi pour utiliser l'Assistant IA.");
+  window.location.href = "/connexion";
+  return;
+}
+
+const response = await fetch("/api/ia", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${session.access_token}`
+  },
+  body: formData
+});
 
       const data = await response.json();
 
