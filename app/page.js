@@ -523,12 +523,19 @@ export default function HomePage() {
 
   /* NAVIGATION */
 
-  function navigate(id) {
-    setActive(id);
-    setMobileMenu(false);
-    setSelectedSubject(null);
-    setSearch("");
-  }
+
+function navigate(id) {
+setActive(id);
+setMobileMenu(false);
+setSelectedSubject(null);
+setSearch("");
+
+
+// Les visiteurs peuvent explorer les rubriques.
+// Les actions protégées demanderont une connexion.
+}
+
+
 
   /* AJOUTER UNE MATIÈRE */
 
