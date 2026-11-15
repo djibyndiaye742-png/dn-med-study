@@ -856,6 +856,13 @@ setSearch("");
   /* OUVRIR UN COURS */
 
 function ouvrirCours(course) {
+
+  if (!user) {
+    alert("Connecte-toi ou crée un compte pour ouvrir ce cours.");
+    window.location.href = "/connexion";
+    return;
+  }
+
   const url = getCourseUrl(course);
 
   if (!url) {
