@@ -874,36 +874,54 @@ function ouvrirCours(course) {
   
   /* TÉLÉCHARGER UN COURS */
 
+
 async function telechargerCours(course) {
-  const url = getCourseUrl(course);
 
-  if (!url) {
-    return alert("Aucun document disponible.");
-  }
 
-  try {
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error("Téléchargement impossible.");
-    }
-
-    const blob = await response.blob();
-    const lien = document.createElement("a");
-    const urlTemporaire = URL.createObjectURL(blob);
-
-    lien.href = urlTemporaire;
-    lien.download = `${course.titre || "cours"}.pdf`;
-
-    document.body.appendChild(lien);
-    lien.click();
-    lien.remove();
-
-    URL.revokeObjectURL(urlTemporaire);
-  } catch (error) {
-    alert("Impossible de télécharger ce document. Réessaie.");
-  }
+if (!user) {
+alert("Connecte-toi ou crée un compte pour télécharger ce cours.");
+window.location.href = "/connexion";
+return;
 }
+
+
+const url = getCourseUrl(course);
+
+
+if (!url) {
+return alert("Aucun document disponible.");
+}
+
+
+try {
+const response = await fetch(url);
+
+
+if (!response.ok) {
+  throw new Error("Téléchargement impossible.");
+}
+
+const blob = await response.blob();
+const lien = document.createElement("a");
+const urlTemporaire = URL.createObjectURL(blob);
+
+lien.href = urlTemporaire;
+lien.download = `${course.titre || "cours"}.pdf`;
+
+document.body.appendChild(lien);
+lien.click();
+lien.remove();
+
+URL.revokeObjectURL(urlTemporaire);
+
+
+
+} catch (error) {
+alert("Impossible de télécharger ce document. Réessaie.");
+}
+}
+
+
 
   /* ASSISTANT IA */
 
