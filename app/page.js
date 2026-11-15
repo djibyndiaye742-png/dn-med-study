@@ -2124,6 +2124,67 @@ PARAMÈTRES
 
 
 {active === "settings" && (
+  <>
+    <SectionTitle
+      eyebrow="PERSONNALISATION"
+      title="Paramètres"
+      description="Gère ton compte et tes préférences."
+    />
+
+    <div className="settings-card">
+
+      {user ? (
+        <div className="settings-row">
+          <IconTile
+            icon={LogOut}
+            color="#DC2626"
+            background="#FEECEC"
+          />
+
+          <div>
+            <strong>Déconnexion</strong>
+            <p>Déconnecte-toi de ton compte étudiant.</p>
+          </div>
+
+          <button
+            className="outline-button"
+            onClick={deconnexion}
+          >
+            Déconnexion
+          </button>
+        </div>
+      ) : (
+        <div className="settings-row">
+          <IconTile
+            icon={UserRound}
+            color="#2563EB"
+            background="#EAF1FF"
+          />
+
+          <div>
+            <strong>Accès au compte</strong>
+            <p>Connecte-toi ou crée ton compte étudiant.</p>
+          </div>
+
+          <button
+            className="primary-button"
+            onClick={() => window.location.href = "/connexion"}
+          >
+            Se connecter / S'inscrire
+          </button>
+        </div>
+      )}
+
+    </div>
+  </>
+)}
+
+{/* =========================================
+PARAMÈTRES
+========================================= */}
+
+
+{active === "settings" && (
 <>
 
 
@@ -2221,8 +2282,6 @@ PARAMÈTRES
 
 </>
 )}
-
-
 
 
 
