@@ -842,17 +842,38 @@ export default function HomePage() {
 
   /* OUVRIR UN COURS */
 
-function ouvrirCours(course) {
+async function ouvrirCours(course) {
   const url = getCourseUrl(course);
 
   if (!url) {
     return alert("Aucun document disponible.");
   }
 
-  const viewerUrl =
-    `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  const fenetre = window.open("about:blank", "_blank");
 
-  window.open(viewerUrl, "_blank", "noopener,noreferrer");
+  if (!fenetre) {
+    return alert("Autorise l'ouverture des fenêtres dans ton navigateur.");
+  }
+
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("Impossible de récupérer le PDF.");
+    }
+
+    const blob = await response.blob();
+    const pdf = new Blob([blob], {
+      type: "application/pdf"
+    });
+
+    const urlPDF = URL.createObjectURL(pdf);
+    fenetre.location.href = urlPDF;
+
+  } catch (error) {
+    fenetre.close();
+    alert("Impossible d'afficher ce PDF.");
+  }
 }
   
   /* TÉLÉCHARGER UN COURS */
