@@ -293,79 +293,81 @@ export default function HomePage() {
   /* AUTHENTIFICATION SUPABASE */
 
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-    async function verifierSession() {
-      try {
-        const {
-          data: { session },
-          error
-        } = await supabase.auth.getSession();
+  async function verifierSession() {
+    try {
+      const {
+        data: { session },
+        error
+      } = await supabase.auth.getSession();
 
-        if (error) throw error;
+      if (error) throw error;
+      if (!mounted) return;
 
-        if (!mounted) return;
-
-        if (!session?.user) {
-          window.location.href = "/connexion";
-          return;
-        }
-
-        setUser(session.user);
-
-        const {
-          data: profileData,
-          error: profileError
-        } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error("Erreur profil :", profileError);
-        }
-
-        if (!mounted) return;
-
-        if (profileData) {
-          setProfile(profileData);
-        }
-
+      if (!session?.user) {
+        setUser(null);
         setLoading(false);
+        return;
+      }
 
-      } catch (error) {
-        console.error("Erreur authentification :", error);
+      setUser(session.user);
 
-        if (mounted) {
-          setLoading(false);
-          alert(
-            error.message ||
-            "Impossible de vérifier ta session."
-          );
-        }
+      const {
+        data: profileData,
+        error: profileError
+      } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Erreur profil :", profileError);
+      }
+
+      if (!mounted) return;
+
+      if (profileData) {
+        setProfile(profileData);
+      }
+
+      setLoading(false);
+
+    } catch (error) {
+      console.error("Erreur authentification :", error);
+
+      if (mounted) {
+        setLoading(false);
+        alert(error.message || "Impossible de vérifier ta session.");
       }
     }
+  }
 
-    verifierSession();
+  verifierSession();
 
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!mounted) return;
+  const {
+    data: { subscription }
+  } = supabase.auth.onAuthStateChange((event, session) => {
+    if (!mounted) return;
 
-        if (event === "SIGNED_OUT" || !session?.user) {
-          window.location.href = "/connexion";
-        }
-      }
-    );
+    if (event === "SIGNED_OUT" || !session?.user) {
+      setUser(null);
+      setProfile({});
+      setLoading(false);
+      return;
+    }
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+    setUser(session.user);
+  });
+
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, []);
+
+    
 
   /* CHARGEMENT DES DONNÉES */
 
