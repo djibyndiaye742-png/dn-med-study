@@ -1005,6 +1005,76 @@ async function telechargerCours(course) {
       </div>
     );
   }
+  /* ACCUEIL PUBLIC */
+
+if (!user) {
+  return (
+    <main style={{
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #10243A, #2563EB)",
+      color: "white",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "30px 20px",
+      textAlign: "center"
+    }}>
+
+      <div style={{
+        fontSize: "48px",
+        fontWeight: "bold",
+        marginBottom: "15px"
+      }}>
+        DN MED STUDY
+      </div>
+
+      <h1 style={{
+        fontSize: "32px",
+        fontWeight: "bold",
+        maxWidth: "650px",
+        marginBottom: "15px"
+      }}>
+        Réussis tes études en santé avec DN Med Study
+      </h1>
+
+      <p style={{
+        fontSize: "17px",
+        maxWidth: "550px",
+        lineHeight: "1.7",
+        marginBottom: "30px"
+      }}>
+        Retrouve tes cours, prépare tes examens,
+        entraîne-toi avec des QCM et améliore
+        tes connaissances grâce à l'intelligence artificielle.
+      </p>
+
+      <a
+        href="/connexion"
+        style={{
+          background: "white",
+          color: "#10243A",
+          padding: "15px 30px",
+          borderRadius: "10px",
+          fontWeight: "bold",
+          textDecoration: "none",
+          fontSize: "16px"
+        }}
+      >
+        Commencer maintenant
+      </a>
+
+      <p style={{
+        marginTop: "25px",
+        fontSize: "14px",
+        opacity: 0.85
+      }}>
+        La plateforme d'apprentissage des étudiants en santé.
+      </p>
+
+    </main>
+  );
+}
   /* =====================================================
      PRÉPARATION DE L'INTERFACE
   ===================================================== */
