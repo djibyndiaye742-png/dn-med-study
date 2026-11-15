@@ -27,7 +27,8 @@ export default function PdfViewer({ url, onClose }) {
           <p>Impossible d'afficher ce PDF.</p>
         ) : (
           <Document
-            file={url}
+  file={url}
+  suspense={false}
             onLoadSuccess={({ numPages }) => setNumPages(numPages)}
             onLoadError={() => setError(true)}
             loading={<p>Chargement de la leçon...</p>}
