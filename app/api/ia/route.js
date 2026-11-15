@@ -35,7 +35,39 @@ N'invente aucune information.`,
 };
 
 export async function POST(request) {
-  try {
+  try 
+  {    // VÉRIFICATION OBLIGATOIRE DE CONNEXION
+
+    const authHeader = request.headers.get("authorization");
+    const token = authHeader?.replace(/^Bearer\s+/i, "");
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Connecte-toi pour utiliser l'Assistant IA." },
+        { status: 401 }
+      );
+    }
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false
+        }
+      }
+    );
+
+    const { data: authData, error: authError } =
+      await supabaseAuth.auth.getUser(token);
+
+    if (authError || !authData.user) {
+      return NextResponse.json(
+        { error: "Session invalide. Connecte-toi à nouveau." },
+        { status: 401 }
+      );
+    }
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey || !apiKey.trim()) {
