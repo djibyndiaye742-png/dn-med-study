@@ -3648,13 +3648,14 @@ PARAMÈTRES
         }
             `}</style>
 
-      {pdfOuvert && (
+            {pdfOuvert && (
         <PdfViewer
           url={pdfOuvert}
           onClose={() => setPdfOuvert(null)}
         />
       )}
 
+      </div>
     </main>
   );
 }
