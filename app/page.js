@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
+import PdfViewer from "./PdfViewer";
 
 const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
 const STORAGE_BUCKET = "cours-pdf";
