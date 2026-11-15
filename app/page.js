@@ -2118,172 +2118,104 @@ const response = await fetch("/api/ia", {
                 </div>
               </>
             )}
-{/* =========================================
-PARAMÈTRES
-========================================= */}
 
+            {/* =========================================
+                PARAMÈTRES
+            ========================================= */}
 
-{active === "settings" && (
-  <>
-    <SectionTitle
-      eyebrow="PERSONNALISATION"
-      title="Paramètres"
-      description="Gère ton compte et tes préférences."
-    />
+            {active === "settings" && (
+              <>
+                <SectionTitle
+                  eyebrow="PERSONNALISATION"
+                  title="Paramètres"
+                  description="Gère ton compte et tes préférences."
+                />
 
-    <div className="settings-card">
+                <div className="settings-card">
 
-      {user ? (
-        <div className="settings-row">
-          <IconTile
-            icon={LogOut}
-            color="#DC2626"
-            background="#FEECEC"
-          />
+                  <div className="settings-row">
+                    <IconTile
+                      icon={UserRound}
+                      color="#2563EB"
+                      background="#EAF1FF"
+                    />
 
-          <div>
-            <strong>Déconnexion</strong>
-            <p>Déconnecte-toi de ton compte étudiant.</p>
+                    <div>
+                      <strong>Mon compte</strong>
+
+                      <p>{user?.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <IconTile
+                      icon={ShieldCheck}
+                      color="#059669"
+                      background="#E7F8EF"
+                    />
+
+                    <div>
+                      <strong>Statut du compte</strong>
+
+                      <p>
+                        {isAdmin ? "Administrateur" : "Étudiant"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <IconTile
+                      icon={Eye}
+                      color="#7C3AED"
+                      background="#F1EAFE"
+                    />
+
+                    <div>
+                      <strong>Apparence</strong>
+
+                      <p>
+                        {dark ? "Mode sombre" : "Mode clair"}
+                      </p>
+                    </div>
+
+                    <button
+                      className="outline-button"
+                      onClick={() => setDark(!dark)}
+                    >
+                      Changer
+                    </button>
+                  </div>
+
+                  <div className="settings-row">
+                    <IconTile
+                      icon={LogOut}
+                      color="#DC2626"
+                      background="#FEECEC"
+                    />
+
+                    <div>
+                      <strong>Déconnexion</strong>
+
+                      <p>
+                        Quitter ton espace personnel.
+                      </p>
+                    </div>
+
+                    <button
+                      className="outline-button danger"
+                      onClick={deconnexion}
+                    >
+                      <LogOut size={15} />
+                      Déconnexion
+                    </button>
+                  </div>
+
+                </div>
+              </>
+            )}
+
           </div>
-
-          <button
-            className="outline-button"
-            onClick={deconnexion}
-          >
-            Déconnexion
-          </button>
         </div>
-      ) : (
-        <div className="settings-row">
-          <IconTile
-            icon={UserRound}
-            color="#2563EB"
-            background="#EAF1FF"
-          />
-
-          <div>
-            <strong>Accès au compte</strong>
-            <p>Connecte-toi ou crée ton compte étudiant.</p>
-          </div>
-
-          <button
-            className="primary-button"
-            onClick={() => window.location.href = "/connexion"}
-          >
-            Se connecter / S'inscrire
-          </button>
-        </div>
-      )}
-
-    </div>
-  </>
-)}
-
-{/* =========================================
-PARAMÈTRES
-========================================= */}
-
-
-{active === "settings" && (
-<>
-
-
-
-<div className="settings-card">
-
-  <div className="settings-row">
-    <IconTile
-      icon={UserRound}
-      color="#2563EB"
-      background="#EAF1FF"
-    />
-
-    <div>
-      <strong>Compte étudiant</strong>
-      <p>
-        {user
-          ? "Tu es connecté à ton compte."
-          : "Tu navigues actuellement en tant que visiteur."}
-      </p>
-    </div>
-  </div>
-
-  <div className="settings-row">
-    <IconTile
-      icon={ShieldCheck}
-      color="#059669"
-      background="#E8F8F0"
-    />
-
-    <div>
-      <strong>Statut du compte</strong>
-      <p>{user ? "Compte connecté" : "Visiteur"}</p>
-    </div>
-  </div>
-
-  <div className="settings-row">
-    <IconTile
-      icon={Palette}
-      color="#7C3AED"
-      background="#F2EBFF"
-    />
-
-    <div>
-      <strong>Apparence</strong>
-      <p>Personnalise l'affichage de DN Med Study.</p>
-    </div>
-  </div>
-
-  {user ? (
-    <div className="settings-row">
-      <IconTile
-        icon={LogOut}
-        color="#DC2626"
-        background="#FEECEC"
-      />
-
-      <div>
-        <strong>Déconnexion</strong>
-        <p>Déconnecte-toi de ton compte étudiant.</p>
-      </div>
-
-      <button
-        className="outline-button"
-        onClick={deconnexion}
-      >
-        Déconnexion
-      </button>
-    </div>
-  ) : (
-    <div className="settings-row">
-      <IconTile
-        icon={UserRound}
-        color="#2563EB"
-        background="#EAF1FF"
-      />
-
-      <div>
-        <strong>Accès au compte</strong>
-        <p>Connecte-toi ou crée ton compte étudiant.</p>
-      </div>
-
-      <button
-        className="primary-button"
-        onClick={() => window.location.href = "/connexion"}
-      >
-        Se connecter / S'inscrire
-      </button>
-    </div>
-  )}
-
-</div>
-
-
-
-</>
-)}
-
-
 
         {/* NAVIGATION MOBILE */}
 
@@ -3648,16 +3580,13 @@ PARAMÈTRES
         }
             `}</style>
 
-            {pdfOuvert && (
+      {pdfOuvert && (
         <PdfViewer
           url={pdfOuvert}
           onClose={() => setPdfOuvert(null)}
         />
       )}
 
-      </div>
     </main>
   );
-}
-
-
+    }
