@@ -609,9 +609,10 @@ export default function HomePage() {
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(filePath, file, {
-          contentType: "application/pdf",
-          upsert: false
-        });
+  contentType: "application/pdf",
+  cacheControl: "3600",
+  upsert: false
+});
 
       if (uploadError) throw uploadError;
 
