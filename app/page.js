@@ -445,10 +445,8 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    if (user?.id) {
-      chargerDonnees();
-    }
-  }, [user?.id]);
+  chargerDonnees();
+}, [user?.id]);
 
   /* FILTRES */
 
