@@ -2138,8 +2138,12 @@ PARAMÈTRES
     />
 
     <div>
-      <strong>Mon compte</strong>
-      <p>{user?.email || "Visiteur non connecté"}</p>
+      <strong>Compte étudiant</strong>
+      <p>
+        {user
+          ? "Tu es connecté à ton compte."
+          : "Tu navigues actuellement en tant que visiteur."}
+      </p>
     </div>
   </div>
 
@@ -2147,37 +2151,26 @@ PARAMÈTRES
     <IconTile
       icon={ShieldCheck}
       color="#059669"
-      background="#E7F8EF"
+      background="#E8F8F0"
     />
 
     <div>
       <strong>Statut du compte</strong>
-      <p>
-        {user
-          ? (isAdmin ? "Administrateur" : "Étudiant")
-          : "Visiteur"}
-      </p>
+      <p>{user ? "Compte connecté" : "Visiteur"}</p>
     </div>
   </div>
 
   <div className="settings-row">
     <IconTile
-      icon={Eye}
+      icon={Palette}
       color="#7C3AED"
-      background="#F1EAFE"
+      background="#F2EBFF"
     />
 
     <div>
       <strong>Apparence</strong>
-      <p>{dark ? "Mode sombre" : "Mode clair"}</p>
+      <p>Personnalise l'affichage de DN Med Study.</p>
     </div>
-
-    <button
-      className="outline-button"
-      onClick={() => setDark(!dark)}
-    >
-      Changer
-    </button>
   </div>
 
   {user ? (
@@ -2190,14 +2183,13 @@ PARAMÈTRES
 
       <div>
         <strong>Déconnexion</strong>
-        <p>Quitter ton espace personnel.</p>
+        <p>Déconnecte-toi de ton compte étudiant.</p>
       </div>
 
       <button
-        className="outline-button danger"
+        className="outline-button"
         onClick={deconnexion}
       >
-        <LogOut size={15} />
         Déconnexion
       </button>
     </div>
@@ -2229,6 +2221,8 @@ PARAMÈTRES
 
 </>
 )}
+
+
 
 
 
