@@ -231,6 +231,7 @@ export default function HomePage() {
   const [modal, setModal] = useState("");
   const [busy, setBusy] = useState(false);
   const [dark, setDark] = useState(false);
+  const [pdfOuvert, setPdfOuvert] = useState(null);
 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
