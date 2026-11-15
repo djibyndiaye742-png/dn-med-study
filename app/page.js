@@ -849,14 +849,10 @@ function ouvrirCours(course) {
     return alert("Aucun document disponible.");
   }
 
-  const lien = document.createElement("a");
-  lien.href = url;
-  lien.target = "_blank";
-  lien.rel = "noopener noreferrer";
+  const viewerUrl =
+    `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
 
-  document.body.appendChild(lien);
-  lien.click();
-  lien.remove();
+  window.open(viewerUrl, "_blank", "noopener,noreferrer");
 }
   
   /* TÉLÉCHARGER UN COURS */
