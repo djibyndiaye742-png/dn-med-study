@@ -927,6 +927,11 @@ alert("Impossible de télécharger ce document. Réessaie.");
 
   async function lancerIA(e) {
     e.preventDefault();
+    if (!user) {
+  alert("Connecte-toi ou crée un compte pour utiliser l'Assistant IA.");
+  window.location.href = "/connexion";
+  return;
+    }
 
     if (!aiFile) {
       return alert("Sélectionne un fichier PDF.");
