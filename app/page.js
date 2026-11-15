@@ -844,38 +844,14 @@ export default function HomePage() {
 
   /* OUVRIR UN COURS */
 
-async function ouvrirCours(course) {
+function ouvrirCours(course) {
   const url = getCourseUrl(course);
 
   if (!url) {
     return alert("Aucun document disponible.");
   }
 
-  const fenetre = window.open("about:blank", "_blank");
-
-  if (!fenetre) {
-    return alert("Autorise l'ouverture des fenêtres dans ton navigateur.");
-  }
-
-  try {
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error("Impossible de récupérer le PDF.");
-    }
-
-    const blob = await response.blob();
-    const pdf = new Blob([blob], {
-      type: "application/pdf"
-    });
-
-    const urlPDF = URL.createObjectURL(pdf);
-    fenetre.location.href = urlPDF;
-
-  } catch (error) {
-    fenetre.close();
-    alert("Impossible d'afficher ce PDF.");
-  }
+  setPdfOuvert(url);
 }
   
   /* TÉLÉCHARGER UN COURS */
