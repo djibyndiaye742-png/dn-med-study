@@ -3522,9 +3522,17 @@ async function telechargerCours(course) {
         .field input, .field textarea {
           scroll-margin-bottom: 120px;
         }
-      `}</style>
+            `}</style>
+
+      {pdfOuvert && (
+        <PdfViewer
+          url={pdfOuvert}
+          onClose={() => setPdfOuvert(null)}
+        />
+      )}
+
     </main>
   );
-        }
+}
 
 
