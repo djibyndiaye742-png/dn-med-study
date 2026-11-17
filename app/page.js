@@ -1122,16 +1122,16 @@ const response = await fetch("/api/ia", {
     );
   });
 
-  const visibleCourses = search.trim()
-? (
-selectedSubject
-? filteredCourses.filter(course =>
-course.matiere_id === selectedSubject.id ||
-course.matiereId === selectedSubject.id
-)
-: filteredCourses
-)
-: [];
+  const visibleCourses = (search.trim() || selectedSubject)
+  ? (
+      selectedSubject
+        ? filteredCourses.filter(course =>
+            course.matiere_id === selectedSubject.id ||
+            course.matiereId === selectedSubject.id
+          )
+        : filteredCourses
+    )
+  : [];
 
 
 
