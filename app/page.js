@@ -234,6 +234,8 @@ export default function HomePage() {
   const [filterLevel, setFilterLevel] = useState("");
   const [filterSemester, setFilterSemester] = useState("");
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(null);
+const [selectedSemester, setSelectedSemester] = useState(null);
 
   const [modal, setModal] = useState("");
   const [busy, setBusy] = useState(false);
