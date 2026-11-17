@@ -1628,37 +1628,59 @@ const response = await fetch("/api/ia", {
 
             <div className="subjects-grid">
               {availableSubjects
-                .filter(subject => {
-                  const yearText = normalize(subject.niveau || "");
+  .filter(subject => {
+    const nettoyer = valeur =>
+      String(valeur ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
 
-const yearLabels = [
-  "premiere annee",
-  "deuxieme annee",
-  "troisieme annee",
-  "quatrieme annee",
-  "cinquieme annee",
-  "sixieme annee"
-];
+    const niveau = nettoyer(subject.niveau);
+    const semestre = nettoyer(subject.semestre);
 
-const yearNumber =
-  Number(yearText.match(/\d+/)?.[0]) ||
-  yearLabels.findIndex(label =>
-    yearText.includes(label)
-  ) + 1;
+    const correspondancesAnnees = [
+      "premiere annee",
+      "deuxieme annee",
+      "troisieme annee",
+      "quatrieme annee",
+      "cinquieme annee",
+      "sixieme annee"
+    ];
 
-                  const semesterNumber = Number(
-                    String(subject.semestre || "").match(/\d+/)?.[0]
-                  );
+    const indexAnnee = correspondancesAnnees.findIndex(
+      annee => niveau.includes(annee)
+    );
 
-                  return (
-                    yearNumber === selectedYear &&
-                    semesterNumber === selectedSemester
-                  );
-                })
-                .filter(subject =>
-                  !search ||
-                  normalize(subject.nom).includes(normalize(search))
-                )
+    const anneeNumero =
+      Number(niveau.match(/\d+/)?.[0]) ||
+      (indexAnnee !== -1 ? indexAnnee + 1 : 0);
+
+    let numeroSemestre = 0;
+
+    if (semestre.includes("premier")) {
+      numeroSemestre = 1;
+    } else if (semestre.includes("deuxieme")) {
+      numeroSemestre = 2;
+    } else {
+      numeroSemestre =
+        Number(semestre.match(/\d+/)?.[0]) || 0;
+    }
+
+    const semestreGlobal =
+      numeroSemestre === 1 || numeroSemestre === 2
+        ? (anneeNumero - 1) * 2 + numeroSemestre
+        : numeroSemestre;
+
+    return (
+      anneeNumero === selectedYear &&
+      semestreGlobal === selectedSemester
+    );
+  })
+  .filter(subject =>
+    !search ||
+    normalize(subject.nom).includes(normalize(search))
+  )
                 .map(subject => {
                   const count = courses.filter(course =>
                     course.matiere_id === subject.id ||
