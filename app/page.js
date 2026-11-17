@@ -1629,7 +1629,17 @@ const response = await fetch("/api/ia", {
             <div className="subjects-grid">
               {availableSubjects
                 .filter(subject => {
-                  const yearText = normalize(subject.niveau || "");
+                  {isAdmin && (
+  <button
+    className="delete-subject"
+    title="Supprimer la matière"
+    onClick={() =>
+      supprimerElement("matieres", subject.id)
+    }
+  >
+    <Trash2 size={16} />
+  </button>
+)}
 
 const yearLabels = [
   "premiere annee",
