@@ -1629,22 +1629,7 @@ const response = await fetch("/api/ia", {
             <div className="subjects-grid">
               {availableSubjects
                 .filter(subject => {
-                  {isAdmin && (
-  <button
-                          {isAdmin && (
-                        <button
-                          className="delete-subject"
-                          title="Supprimer la matière"
-                          onClick={() =>
-                            supprimerElement("matieres", subject.id)
-                          }
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                  const yearText = normalize(subject.niveau || "");
 
 const yearLabels = [
   "premiere annee",
@@ -1661,207 +1646,13 @@ const yearNumber =
     yearText.includes(label)
   ) + 1;
 
-                        className="delete-subject"
-                title="Supprimer la matière"
-                onClick={() =>
-                  supprimerElement("matieres", subject.id)
-                }
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-        );
-      })}
-  </>
-)}
-
-                <section className="content-section">
-                  <div className="section-heading">
-                    <div>
-                      <h2>
-                        {selectedSubject
-                          ? `Cours : ${selectedSubject.nom}`
-                          : "Tous les cours"}
-                      </h2>
-
-                      <p>
-                        {visibleCourses.length} document(s) disponible(s).
-                      </p>
-                    </div>
-                  </div>
-
-                  {visibleCourses.length === 0 ? (
-                    <EmptyState
-                      icon={FileText}
-                      title="Aucun cours trouvé"
-                      description="Aucun document ne correspond à ta recherche."
-                    />
-                  ) : (
-                    <div className="lesson-list">
-                      {visibleCourses.map(course => (
-                        <div className="lesson-card" key={course.id}>
-                          <IconTile
-                            icon={FileText}
-                            color="#DC2626"
-                            background="#FEECEC"
-                            size={23}
-                          />
-
-                          <div className="lesson-info">
-                            <h3>{course.titre}</h3>
-
-                            <p>
-                              {course.matiere} · {course.niveau}
-                              {course.semestre
-                                ? ` · ${course.semestre}`
-                                : ""}
-                            </p>
-
-                            {course.description && (
-                              <p>{course.description}</p>
-                            )}
-                          </div>
-
-                          <div className="lesson-actions">
-  <button
-    className="primary-button"
-    onClick={() => ouvrirCours(course)}
-  >
-    <ExternalLink size={15} />
-    Ouvrir
-  </button>
-
-  <button
-    className="outline-button"
-    onClick={() => telechargerCours(course)}
-  >
-    <Download size={15} />
-    Télécharger
-  </button>
-</div>
-
-                          {isAdmin && (
-                            <button
-                              className="icon-button danger"
-                              onClick={() =>
-                                supprimerElement("cours", course.id)
-                              }
-                            >
-                              <Trash2 size={17} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </>
-            )}                className="delete-subject"
-                title="Supprimer la matière"
-                onClick={() =>
-                  supprimerElement("matieres", subject.id)
-                }
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-        );
-      })}
-  </>
-)}
-
-                <section className="content-section">
-                  <div className="section-heading">
-                    <div>
-                      <h2>
-                        {selectedSubject
-                          ? `Cours : ${selectedSubject.nom}`
-                          : "Tous les cours"}
-                      </h2>
-
-                      <p>
-                        {visibleCourses.length} document(s) disponible(s).
-                      </p>
-                    </div>
-                  </div>
-
-                  {visibleCourses.length === 0 ? (
-                    <EmptyState
-                      icon={FileText}
-                      title="Aucun cours trouvé"
-                      description="Aucun document ne correspond à ta recherche."
-                    />
-                  ) : (
-                    <div className="lesson-list">
-                      {visibleCourses.map(course => (
-                        <div className="lesson-card" key={course.id}>
-                          <IconTile
-                            icon={FileText}
-                            color="#DC2626"
-                            background="#FEECEC"
-                            size={23}
-                          />
-
-                          <div className="lesson-info">
-                            <h3>{course.titre}</h3>
-
-                            <p>
-                              {course.matiere} · {course.niveau}
-                              {course.semestre
-                                ? ` · ${course.semestre}`
-                                : ""}
-                            </p>
-
-                            {course.description && (
-                              <p>{course.description}</p>
-                            )}
-                          </div>
-
-                          <div className="lesson-actions">
-  <button
-    className="primary-button"
-    onClick={() => ouvrirCours(course)}
-  >
-    <ExternalLink size={15} />
-    Ouvrir
-  </button>
-
-  <button
-    className="outline-button"
-    onClick={() => telechargerCours(course)}
-  >
-    <Download size={15} />
-    Télécharger
-  </button>
-</div>
-
-                          {isAdmin && (
-                            <button
-                              className="icon-button danger"
-                              onClick={() =>
-                                supprimerElement("cours", course.id)
-                              }
-                            >
-                              <Trash2 size={17} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </>
-            )}  
-             const semesterLabel =
-             selectedSemester % 2 === 1
-            ? "Premier semestre"
-           : "Deuxième semestre";
+                  const semesterNumber = Number(
+                    String(subject.semestre || "").match(/\d+/)?.[0]
+                  );
 
                   return (
                     yearNumber === selectedYear &&
-                    normalize(subject.semestre || "") === normalize(semesterLabel)
+                    semesterNumber === selectedSemester
                   );
                 })
                 .filter(subject =>
@@ -4037,4 +3828,4 @@ onChange={e => {
 
     </main>
   );
-    }
+}
