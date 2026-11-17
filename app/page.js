@@ -1846,7 +1846,7 @@ const yearNumber =
 
                   return (
                     yearNumber === selectedYear &&
-                    semesterNumber === selectedSemester
+                    normalize(subject.semestre || "") === normalize(semesterLabel)
                   );
                 })
                 .filter(subject =>
