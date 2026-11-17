@@ -1556,55 +1556,52 @@ const response = await fetch("/api/ia", {
                       />
                     ) : (
                       <div className="subjects-grid">
-                       {!selectedYear ? (
-  [...new Set(availableSubjects.map(s => s.niveau).filter(Boolean))]
-    .sort()
-    .map(year => (
-      <div className="subject-card" key={year}>
-        <button
-          className="subject-main"
-          onClick={() => setSelectedYear(year)}
-        >
-          <IconTile
-            icon={BookMarked}
-            color="#2563EB"
-            background="#EAF1FF"
-          />
-          <h3>{year}</h3>
-          <p>Consulter les semestres</p>
-        </button>
-      </div>
-    ))
-) : !selectedSemester ? (
-  <>
-    <button
-      className="outline-button"
-      onClick={() => setSelectedYear(null)}
-    >
-      ← Retour aux années
-    </button>
+                       {availableSubjects.map(subject => {
+  const count = courses.filter(course =>
+    course.matiere_id === subject.id ||
+    course.matiereId === subject.id
+  ).length;
 
-    {[...new Set(
-      availableSubjects
-        .filter(s => s.niveau === selectedYear)
-        .map(s => s.semestre)
-        .filter(Boolean)
-    )].sort().map(semester => (
-      <div className="subject-card" key={semester}>
-        <button
-          className="subject-main"
-          onClick={() => setSelectedSemester(semester)}
-        >
-          <IconTile
-            icon={BookMarked}
-            color="#2563EB"
-            background="#EAF1FF"
-          />
-          <h3>{semester}</h3>
-          <p>{selectedYear}</p>
-        </button>
+  return (
+    <div className="subject-card" key={subject.id}>
+      <button
+        className="subject-main"
+        onClick={() => setSelectedSubject(subject)}
+      >
+        <IconTile
+          icon={BookMarked}
+          color="#2563EB"
+          background="#EAF1FF"
+        />
+
+        <h3>{subject.nom}</h3>
+
+        <p>
+          {subject.universite} · {subject.niveau}
+        </p>
+
+        <span>{subject.semestre}</span>
+      </button>
+
+      <div className="subject-footer">
+        <span>{count} cours</span>
+        <ChevronRight size={17} />
       </div>
-    ))}
+
+      {isAdmin && (
+        <button
+          className="delete-subject"
+          title="Supprimer la matière"
+          onClick={() =>
+            supprimerElement("matieres", subject.id)
+          }
+        >
+          <Trash2 size={16} />
+        </button>
+      )}
+    </div>
+  );
+})}
   </>
 ) : (
   <>
