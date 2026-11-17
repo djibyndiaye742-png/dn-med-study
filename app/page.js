@@ -602,59 +602,6 @@ setSearch("");
     throw new Error("Fichier ou utilisateur manquant.");
   }
 
-  const extension = file.name.split(".").pop().toLowerCase();
-
-  const mimeTypes = {
-    pdf: "application/pdf",
-    ppt: "application/vnd.ms-powerpoint",
-    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-  };
-
-  const contentType = mimeTypes[extension];
-
-  if (!contentType) {
-    throw new Error("Format non accepté. Utilise PDF, PPT ou PPTX.");
-  }
-
-  setUploading(true);
-  setUploadProgress(0);
-
-  try {
-    const safeName = file.name.replace(
-      /[^a-zA-Z0-9._-]/g,
-      "_"
-    );
-
-    const filePath =
-      `${user.id}/${Date.now()}_${safeName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(filePath, file, {
-        contentType,
-        cacheControl: "3600",
-        upsert: false
-      });
-
-    if (uploadError) throw uploadError;
-
-    setUploadProgress(100);
-
-    const { data } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(filePath);
-
-    if (!data?.publicUrl) {
-      throw new Error("Impossible de récupérer le lien du fichier.");
-    }
-
-    return data.publicUrl;
-
-  } finally {
-    setUploading(false);
-  }
-  }
-
     const isPdf =
       file.type === "application/pdf" ||
       file.name.toLowerCase().endsWith(".pdf");
