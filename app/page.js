@@ -255,7 +255,7 @@ export default function HomePage() {
     description: ""
   });
 
-  const [lessonFile, setLessonFile] = useState(null);
+  const [lessonFiles, setLessonFiles] = useState([]);
 
   const [examForm, setExamForm] = useState({
     titre: "",
