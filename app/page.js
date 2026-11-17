@@ -1452,94 +1452,158 @@ const response = await fetch("/api/ia", {
                 MES COURS
             ========================================= */}
 
-            {activeTab === "courses" && (
-  <div className="courses-page">
+            {active === "courses" && (
+  <>
+    <SectionTitle
+      eyebrow="BIBLIOTHÈQUE"
+      title="Mes cours"
+      description="Retrouve tes cours par année, semestre et matière."
+      action={
+        isAdmin && (
+          <button
+            className="primary-button"
+            onClick={() => setModal("course")}
+          >
+            <Plus size={17} />
+            Publier un cours
+          </button>
+        )
+      }
+    />
 
-    <div className="section-heading">
-      <div>
-        <h2>Mes cours</h2>
-        <p>Retrouve tes cours par année, semestre et matière.</p>
+    {/* RECHERCHE ET FILTRES */}
+
+    <div className="filter-panel">
+      <div className="search-box">
+        <Search size={18} />
+
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Rechercher un cours ou une matière..."
+        />
+      </div>
+
+      <div className="filters-row">
+        <select
+          value={filterUniversity}
+          onChange={e => setFilterUniversity(e.target.value)}
+        >
+          <option value="">Toutes les universités</option>
+          {universities.map(value => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterLevel}
+          onChange={e => setFilterLevel(e.target.value)}
+        >
+          <option value="">Tous les niveaux</option>
+          {levels.map(value => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterSemester}
+          onChange={e => setFilterSemester(e.target.value)}
+        >
+          <option value="">Tous les semestres</option>
+          {semesters.map(value => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
       </div>
     </div>
 
-    {/* RECHERCHE */}
-    <input
-      type="text"
-      className="search-input"
-      placeholder="Rechercher un cours, une matière..."
-      value={search}
-      onChange={e => setSearch(e.target.value)}
-    />
+    {/* NAVIGATION ANNÉES ET SEMESTRES */}
 
-    {/* FILTRES */}
-    <div className="filters-row">
-      <select
-        value={filterUniversity}
-        onChange={e => setFilterUniversity(e.target.value)}
-      >
-        <option value="">Toutes les universités</option>
-        {universities.map(u => (
-          <option key={u} value={u}>{u}</option>
-        ))}
-      </select>
-
-      <select
-        value={filterLevel}
-        onChange={e => setFilterLevel(e.target.value)}
-      >
-        <option value="">Tous les niveaux</option>
-        {levels.map(l => (
-          <option key={l} value={l}>{l}</option>
-        ))}
-      </select>
-    </div>
-
-    {/* NAVIGATION */}
     {!selectedSubject && (
-      <>
+      <section className="content-section">
+
         {!selectedYear ? (
-          <div className="subject-grid">
-            {[1, 2, 3, 4, 5, 6].map(year => (
-              <button
-                className="subject-card"
-                key={year}
-                onClick={() => setSelectedYear(year)}
-              >
-                <IconTile
-                  icon={BookMarked}
-                  color="#2563EB"
-                  background="#EAF1FF"
-                />
-                <h3>{year}{year === 1 ? "ère" : "e"} année</h3>
-                <p>Deux semestres</p>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="section-heading">
+              <div>
+                <h2>Choisir une année</h2>
+                <p>Sélectionne ton année d'études.</p>
+              </div>
+            </div>
+
+            <div className="subjects-grid">
+              {[
+                "Première année",
+                "Deuxième année",
+                "Troisième année",
+                "Quatrième année",
+                "Cinquième année",
+                "Sixième année"
+              ].map((year, index) => (
+                <button
+                  className="subject-card"
+                  key={year}
+                  onClick={() => {
+                    setSelectedYear(index + 1);
+                    setSelectedSemester(null);
+                  }}
+                >
+                  <IconTile
+                    icon={BookMarked}
+                    color="#2563EB"
+                    background="#EAF1FF"
+                  />
+
+                  <h3>{year}</h3>
+                  <p>2 semestres</p>
+                </button>
+              ))}
+            </div>
+          </>
         ) : !selectedSemester ? (
           <>
             <button
-              className="outline-button"
+              className="back-button"
               onClick={() => setSelectedYear(null)}
             >
-              ← Retour aux années
+              <ArrowLeft size={16} />
+              Retour aux années
             </button>
 
-            <div className="subject-grid">
+            <div className="section-heading">
+              <div>
+                <h2>Année {selectedYear}</h2>
+                <p>Choisis ton semestre.</p>
+              </div>
+            </div>
+
+            <div className="subjects-grid">
               {[1, 2].map(number => {
-                const semester = (selectedYear - 1) * 2 + number;
+                const semesterNumber =
+                  (selectedYear - 1) * 2 + number;
+
                 return (
                   <button
                     className="subject-card"
-                    key={semester}
-                    onClick={() => setSelectedSemester(semester)}
+                    key={semesterNumber}
+                    onClick={() =>
+                      setSelectedSemester(semesterNumber)
+                    }
                   >
                     <IconTile
                       icon={BookMarked}
                       color="#2563EB"
                       background="#EAF1FF"
                     />
-                    <h3>Semestre {semester}</h3>
-                    <p>{selectedYear}{selectedYear === 1 ? "ère" : "e"} année</p>
+
+                    <h3>Semestre {semesterNumber}</h3>
+                    <p>Consulter les matières</p>
                   </button>
                 );
               })}
@@ -1548,26 +1612,40 @@ const response = await fetch("/api/ia", {
         ) : (
           <>
             <button
-              className="outline-button"
+              className="back-button"
               onClick={() => setSelectedSemester(null)}
             >
-              ← Retour aux semestres
+              <ArrowLeft size={16} />
+              Retour aux semestres
             </button>
 
-            <div className="subject-grid">
+            <div className="section-heading">
+              <div>
+                <h2>Semestre {selectedSemester}</h2>
+                <p>Choisis une matière pour consulter ses leçons.</p>
+              </div>
+            </div>
+
+            <div className="subjects-grid">
               {availableSubjects
                 .filter(subject => {
+                  const yearNumber = Number(
+                    String(subject.niveau || "").match(/\d+/)?.[0]
+                  );
+
                   const semesterNumber = Number(
                     String(subject.semestre || "").match(/\d+/)?.[0]
                   );
+
                   return (
-                    semesterNumber === selectedSemester &&
-                    (!filterUniversity ||
-                      subject.universite === filterUniversity) &&
-                    (!filterLevel ||
-                      subject.niveau === filterLevel)
+                    yearNumber === selectedYear &&
+                    semesterNumber === selectedSemester
                   );
                 })
+                .filter(subject =>
+                  !search ||
+                  normalize(subject.nom).includes(normalize(search))
+                )
                 .map(subject => {
                   const count = courses.filter(course =>
                     course.matiere_id === subject.id ||
@@ -1575,7 +1653,10 @@ const response = await fetch("/api/ia", {
                   ).length;
 
                   return (
-                    <div className="subject-card" key={subject.id}>
+                    <div
+                      className="subject-card"
+                      key={subject.id}
+                    >
                       <button
                         className="subject-main"
                         onClick={() => setSelectedSubject(subject)}
@@ -1585,9 +1666,14 @@ const response = await fetch("/api/ia", {
                           color="#2563EB"
                           background="#EAF1FF"
                         />
+
                         <h3>{subject.nom}</h3>
-                        <p>{subject.universite} · {subject.niveau}</p>
-                        <span>Semestre {selectedSemester}</span>
+
+                        <p>
+                          {subject.universite} · {subject.niveau}
+                        </p>
+
+                        <span>{subject.semestre}</span>
                       </button>
 
                       <div className="subject-footer">
@@ -1598,6 +1684,7 @@ const response = await fetch("/api/ia", {
                       {isAdmin && (
                         <button
                           className="delete-subject"
+                          title="Supprimer la matière"
                           onClick={() =>
                             supprimerElement("matieres", subject.id)
                           }
@@ -1611,50 +1698,68 @@ const response = await fetch("/api/ia", {
             </div>
           </>
         )}
-      </>
+      </section>
     )}
 
-    {/* LEÇONS */}
+    {/* AFFICHAGE DES LEÇONS */}
+
     {selectedSubject && (
       <>
         <button
-          className="outline-button"
+          className="back-button"
           onClick={() => setSelectedSubject(null)}
         >
-          ← Retour aux matières
+          <ArrowLeft size={16} />
+          Retour aux matières
         </button>
 
         <section className="content-section">
           <div className="section-heading">
             <div>
-              <h2>{selectedSubject.nom}</h2>
-              <p>Leçons disponibles dans cette matière.</p>
+              <h2>Cours : {selectedSubject.nom}</h2>
+              <p>
+                {selectedSubject.universite} ·
+                {selectedSubject.niveau} ·
+                {selectedSubject.semestre}
+              </p>
             </div>
           </div>
 
           {courses.filter(course =>
-            course.matiere_id === selectedSubject.id ||
-            course.matiereId === selectedSubject.id
+            (
+              course.matiere_id === selectedSubject.id ||
+              course.matiereId === selectedSubject.id
+            ) &&
+            (
+              !search ||
+              normalize(course.titre || course.title)
+                .includes(normalize(search))
+            )
           ).length === 0 ? (
             <EmptyState
               icon={FileText}
-              title="Aucun cours disponible"
-              description="Aucune leçon n'est encore enregistrée dans cette matière."
+              title="Aucun cours trouvé"
+              description="Aucune leçon ne correspond à cette recherche."
             />
           ) : (
             <div className="lesson-list">
               {courses
                 .filter(course =>
-                  course.matiere_id === selectedSubject.id ||
-                  course.matiereId === selectedSubject.id
-                )
-                .filter(course =>
-                  !search ||
-                  normalize(course.titre || course.title)
-                    .includes(normalize(search))
+                  (
+                    course.matiere_id === selectedSubject.id ||
+                    course.matiereId === selectedSubject.id
+                  ) &&
+                  (
+                    !search ||
+                    normalize(course.titre || course.title)
+                      .includes(normalize(search))
+                  )
                 )
                 .map(course => (
-                  <div className="lesson-card" key={course.id}>
+                  <div
+                    className="lesson-card"
+                    key={course.id}
+                  >
                     <IconTile
                       icon={FileText}
                       color="#DC2626"
@@ -1664,10 +1769,14 @@ const response = await fetch("/api/ia", {
 
                     <div className="lesson-info">
                       <h3>{course.titre}</h3>
+
                       <p>
                         {course.matiere} · {course.niveau}
-                        {course.semestre ? ` · ${course.semestre}` : ""}
+                        {course.semestre
+                          ? ` · ${course.semestre}`
+                          : ""}
                       </p>
+
                       {course.description && (
                         <p>{course.description}</p>
                       )}
@@ -1708,9 +1817,9 @@ const response = await fetch("/api/ia", {
         </section>
       </>
     )}
-
-  </div>
+  </>
 )}
+
 
             {/* =========================================
                 EXAMENS
