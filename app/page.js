@@ -2379,18 +2379,20 @@ const response = await fetch("/api/ia", {
               <input
                 type="file"
                 accept="application/pdf,.pdf"
-                onChange={e =>
-                  setLessonFile(e.target.files?.[0] || null)
-                }
-              />
-            </label>
+multiple
+onChange={e => {
+  setLessonFiles(Array.from(e.target.files || []));
+  e.target.value = "";
+}}
+/>
+</label>
 
-            {lessonFile && (
-              <div className="file-selected">
-                <FileCheck size={16} />
-                {lessonFile.name}
-              </div>
-            )}
+{lessonFiles.length > 0 && (
+  <div className="file-selected">
+    <FileCheck size={16} />
+    {lessonFiles.length} PDF sélectionné(s)
+  </div>
+)}
 
             <div className="separator-text">
               OU UTILISER UN LIEN PDF
