@@ -2520,7 +2520,7 @@ onChange={e => {
             {uploading && (
               <div className="upload-progress">
                 <div className="progress-label">
-                  <span>Envoi du PDF</span>
+                  <span>Envoi du cours</span>
                   <strong>{uploadProgress}%</strong>
                 </div>
 
