@@ -1631,15 +1631,20 @@ const response = await fetch("/api/ia", {
                 .filter(subject => {
                   {isAdmin && (
   <button
-    className="delete-subject"
-    title="Supprimer la matière"
-    onClick={() =>
-      supprimerElement("matieres", subject.id)
-    }
-  >
-    <Trash2 size={16} />
-  </button>
-)}
+                          {isAdmin && (
+                        <button
+                          className="delete-subject"
+                          title="Supprimer la matière"
+                          onClick={() =>
+                            supprimerElement("matieres", subject.id)
+                          }
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
 
 const yearLabels = [
   "premiere annee",
