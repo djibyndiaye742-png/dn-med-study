@@ -2395,7 +2395,7 @@ const response = await fetch("/api/ia", {
                 setCourseForm({ ...courseForm, titre: value })
               }
               placeholder="Ex : Introduction à l'anatomie"
-              required
+              required={lessonFiles.length <= 1}
             />
 
             <SelectField
