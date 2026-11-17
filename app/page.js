@@ -1629,9 +1629,22 @@ const response = await fetch("/api/ia", {
             <div className="subjects-grid">
               {availableSubjects
                 .filter(subject => {
-                  const yearNumber = Number(
-                    String(subject.niveau || "").match(/\d+/)?.[0]
-                  );
+                  const yearText = normalize(subject.niveau || "");
+
+const yearLabels = [
+  "premiere annee",
+  "deuxieme annee",
+  "troisieme annee",
+  "quatrieme annee",
+  "cinquieme annee",
+  "sixieme annee"
+];
+
+const yearNumber =
+  Number(yearText.match(/\d+/)?.[0]) ||
+  yearLabels.findIndex(label =>
+    yearText.includes(label)
+  ) + 1;
 
                   const semesterNumber = Number(
                     String(subject.semestre || "").match(/\d+/)?.[0]
