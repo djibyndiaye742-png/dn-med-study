@@ -3647,11 +3647,34 @@ onChange={e => {
             `}</style>
 
       {pdfOuvert && (
-        <PdfViewer
-          url={pdfOuvert}
-          onClose={() => setPdfOuvert(null)}
-        />
-      )}
+  /\.(pptx?)$/i.test(pdfOuvert.split(/[?#]/)[0]) ? (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "#fff",
+        overflowY: "auto"
+      }}
+    >
+      <div style={{ padding: 12, textAlign: "right" }}>
+        <button
+          type="button"
+          onClick={() => setPdfOuvert(null)}
+        >
+          Fermer
+        </button>
+      </div>
+
+      <PptxViewer url={pdfOuvert} />
+    </div>
+  ) : (
+    <PdfViewer
+      url={pdfOuvert}
+      onClose={() => setPdfOuvert(null)}
+    />
+  )
+)}
 
     </main>
   );
