@@ -2389,14 +2389,14 @@ const response = await fetch("/api/ia", {
           <form className="modal-form" onSubmit={ajouterLecon}>
 
             <Field
-              label="Titre du cours"
-              value={courseForm.titre}
-              onChange={value =>
-                setCourseForm({ ...courseForm, titre: value })
-              }
-              placeholder="Ex : Introduction à l'anatomie"
-              required={lessonFiles.length <= 1}
-            />
+  label="Titre du cours"
+  value={courseForm.titre}
+  onChange={value =>
+    setCourseForm({ ...courseForm, titre: value })
+  }
+  placeholder="Ex : Introduction à l'anatomie"
+  required={false}
+/>
 
             <SelectField
               label="Matière"
