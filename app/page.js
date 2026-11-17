@@ -595,59 +595,65 @@ setSearch("");
     }
   }
 
-  /* ENVOI PDF VERS SUPABASE STORAGE */
+  /* ENVOI PDF ET POWERPOINT VERS SUPABASE STORAGE */
 
-  async function envoyerPDF(file) {
+async function envoyerPDF(file) {
   if (!file || !user?.id) {
     throw new Error("Fichier ou utilisateur manquant.");
   }
 
-    const isPdf =
-      file.type === "application/pdf" ||
-      file.name.toLowerCase().endsWith(".pdf");
+  const extension = file.name.split(".").pop().toLowerCase();
 
-    if (!isPdf) {
-      throw new Error("Le fichier doit être au format PDF.");
-    }
+  const formats = {
+    pdf: "application/pdf",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  };
 
-    setUploading(true);
-    setUploadProgress(0);
+  const contentType = formats[extension];
 
-    try {
-      const safeName = file.name.replace(
-        /[^a-zA-Z0-9._-]/g,
-        "_"
-      );
-
-      const filePath =
-        `${user.id}/${Date.now()}_${safeName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(filePath, file, {
-  contentType: "application/pdf",
-  cacheControl: "3600",
-  upsert: false
-});
-
-      if (uploadError) throw uploadError;
-
-      setUploadProgress(100);
-
-      const { data } = supabase.storage
-        .from(STORAGE_BUCKET)
-        .getPublicUrl(filePath);
-
-      if (!data?.publicUrl) {
-        throw new Error("Impossible de récupérer le lien PDF.");
-      }
-
-      return data.publicUrl;
-
-    } finally {
-      setUploading(false);
-    }
+  if (!contentType) {
+    throw new Error("Format refusé. Utilise PDF, PPT ou PPTX.");
   }
+
+  setUploading(true);
+  setUploadProgress(0);
+
+  try {
+    const safeName = file.name.replace(
+      /[^a-zA-Z0-9._-]/g,
+      "_"
+    );
+
+    const filePath =
+      `${user.id}/${Date.now()}_${safeName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filePath, file, {
+        contentType: contentType,
+        cacheControl: "3600",
+        upsert: false
+      });
+
+    if (uploadError) throw uploadError;
+
+    setUploadProgress(100);
+
+    const { data } = supabase.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(filePath);
+
+    if (!data?.publicUrl) {
+      throw new Error("Impossible de récupérer le lien du fichier.");
+    }
+
+    return data.publicUrl;
+
+  } finally {
+    setUploading(false);
+  }
+}
 
   /* PUBLIER UNE OU PLUSIEURS LEÇONS */
 
