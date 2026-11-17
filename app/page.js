@@ -2473,7 +2473,7 @@ const response = await fetch("/api/ia", {
 
               <input
                 type="file"
-                accept="application/pdf,.pdf"
+                accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
 multiple
 onChange={e => {
   setLessonFiles(Array.from(e.target.files || []));
