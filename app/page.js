@@ -18,6 +18,9 @@ import { supabase } from "../lib/supabase";
 const PdfViewer = dynamic(() => import("./PdfViewer"), {
   ssr: false
 });
+const PptxViewer = dynamic(() => import("./PptxViewer"), {
+  ssr: false
+});
 
 const ADMIN_EMAIL = "djibyndiaye742@gmail.com";
 const STORAGE_BUCKET = "cours-pdf";
