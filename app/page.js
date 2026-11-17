@@ -1452,297 +1452,265 @@ const response = await fetch("/api/ia", {
                 MES COURS
             ========================================= */}
 
-            {active === "courses" && (
-              <>
-                <SectionTitle
-                  eyebrow="BIBLIOTHÈQUE"
-                  title="Mes cours"
-                  description="Retrouve les cours et supports de formation."
-                  action={
-                    isAdmin && (
-                      <button
-                        className="primary-button"
-                        onClick={() => setModal("course")}
-                      >
-                        <Plus size={17} />
-                        Publier un cours
-                      </button>
-                    )
-                  }
-                />
+            {activeTab === "courses" && (
+  <div className="courses-page">
 
-                {selectedSubject && (
-                  <button
-                    className="back-button"
-                    onClick={() => setSelectedSubject(null)}
-                  >
-                    <ArrowLeft size={16} />
-                    Retour aux matières
-                  </button>
-                )}
-
-                <div className="filter-panel">
-
-                  <div className="search-box">
-                    <Search size={18} />
-
-                    <input
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Rechercher un cours ou une matière..."
-                    />
-                  </div>
-
-                  <div className="filters-row">
-
-                    <select
-                      value={filterUniversity}
-                      onChange={e => setFilterUniversity(e.target.value)}
-                    >
-                      <option value="">Toutes les universités</option>
-
-                      {universities.map(value => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-
-                    <select
-                      value={filterLevel}
-                      onChange={e => setFilterLevel(e.target.value)}
-                    >
-                      <option value="">Tous les niveaux</option>
-
-                      {levels.map(value => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-
-                    <select
-                      value={filterSemester}
-                      onChange={e => setFilterSemester(e.target.value)}
-                    >
-                      <option value="">Tous les semestres</option>
-
-                      {semesters.map(value => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-
-                  </div>
-                </div>
-
-                {!selectedSubject && (
-                  <section className="content-section">
-                    <div className="section-heading">
-                      <div>
-                        <h2>Matières disponibles</h2>
-                        <p>
-                          Sélectionne une matière pour voir ses cours.
-                        </p>
-                      </div>
-                    </div>
-
-                    {availableSubjects.length === 0 ? (
-                      <EmptyState
-                        icon={Layers}
-                        title="Aucune matière disponible"
-                        description="Les matières apparaîtront ici."
-                      />
-                    ) : (
-                      <div className="subjects-grid">
-                       {availableSubjects.map(subject => {
-  const count = courses.filter(course =>
-    course.matiere_id === subject.id ||
-    course.matiereId === subject.id
-  ).length;
-
-  return (
-    <div className="subject-card" key={subject.id}>
-      <button
-        className="subject-main"
-        onClick={() => setSelectedSubject(subject)}
-      >
-        <IconTile
-          icon={BookMarked}
-          color="#2563EB"
-          background="#EAF1FF"
-        />
-
-        <h3>{subject.nom}</h3>
-
-        <p>
-          {subject.universite} · {subject.niveau}
-        </p>
-
-        <span>{subject.semestre}</span>
-      </button>
-
-      <div className="subject-footer">
-        <span>{count} cours</span>
-        <ChevronRight size={17} />
+    <div className="section-heading">
+      <div>
+        <h2>Mes cours</h2>
+        <p>Retrouve tes cours par année, semestre et matière.</p>
       </div>
-
-      {isAdmin && (
-        <button
-          className="delete-subject"
-          title="Supprimer la matière"
-          onClick={() =>
-            supprimerElement("matieres", subject.id)
-          }
-        >
-          <Trash2 size={16} />
-        </button>
-      )}
     </div>
-  );
-})}
-  </>
-) : (
-  <>
-    <button
-      className="outline-button"
-      onClick={() => setSelectedSemester(null)}
-    >
-      ← Retour aux semestres
-    </button>
 
-    {availableSubjects
-      .filter(s =>
-        s.niveau === selectedYear &&
-        s.semestre === selectedSemester
-      )
-      .map(subject => {
-        const count = courses.filter(course =>
-          course.matiere_id === subject.id ||
-          course.matiereId === subject.id
-        ).length;
+    {/* RECHERCHE */}
+    <input
+      type="text"
+      className="search-input"
+      placeholder="Rechercher un cours, une matière..."
+      value={search}
+      onChange={e => setSearch(e.target.value)}
+    />
 
-        return (
-          <div className="subject-card" key={subject.id}>
+    {/* FILTRES */}
+    <div className="filters-row">
+      <select
+        value={filterUniversity}
+        onChange={e => setFilterUniversity(e.target.value)}
+      >
+        <option value="">Toutes les universités</option>
+        {universities.map(u => (
+          <option key={u} value={u}>{u}</option>
+        ))}
+      </select>
+
+      <select
+        value={filterLevel}
+        onChange={e => setFilterLevel(e.target.value)}
+      >
+        <option value="">Tous les niveaux</option>
+        {levels.map(l => (
+          <option key={l} value={l}>{l}</option>
+        ))}
+      </select>
+    </div>
+
+    {/* NAVIGATION */}
+    {!selectedSubject && (
+      <>
+        {!selectedYear ? (
+          <div className="subject-grid">
+            {[1, 2, 3, 4, 5, 6].map(year => (
+              <button
+                className="subject-card"
+                key={year}
+                onClick={() => setSelectedYear(year)}
+              >
+                <IconTile
+                  icon={BookMarked}
+                  color="#2563EB"
+                  background="#EAF1FF"
+                />
+                <h3>{year}{year === 1 ? "ère" : "e"} année</h3>
+                <p>Deux semestres</p>
+              </button>
+            ))}
+          </div>
+        ) : !selectedSemester ? (
+          <>
             <button
-              className="subject-main"
-              onClick={() => setSelectedSubject(subject)}
+              className="outline-button"
+              onClick={() => setSelectedYear(null)}
             >
-              <IconTile
-                icon={BookMarked}
-                color="#2563EB"
-                background="#EAF1FF"
-              />
-              <h3>{subject.nom}</h3>
-              <p>{subject.universite} · {subject.niveau}</p>
-              <span>{subject.semestre}</span>
+              ← Retour aux années
             </button>
 
-            <div className="subject-footer">
-              <span>{count} cours</span>
-              <ChevronRight size={17} />
-            </div>
-
-            {isAdmin && (
-              <button
-                className="delete-subject"
-                title="Supprimer la matière"
-                onClick={() =>
-                  supprimerElement("matieres", subject.id)
-                }
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-        );
-      })}
-  </>
-)}
-
-                <section className="content-section">
-                  <div className="section-heading">
-                    <div>
-                      <h2>
-                        {selectedSubject
-                          ? `Cours : ${selectedSubject.nom}`
-                          : "Tous les cours"}
-                      </h2>
-
-                      <p>
-                        {visibleCourses.length} document(s) disponible(s).
-                      </p>
-                    </div>
-                  </div>
-
-                  {visibleCourses.length === 0 ? (
-                    <EmptyState
-                      icon={FileText}
-                      title="Aucun cours trouvé"
-                      description="Aucun document ne correspond à ta recherche."
+            <div className="subject-grid">
+              {[1, 2].map(number => {
+                const semester = (selectedYear - 1) * 2 + number;
+                return (
+                  <button
+                    className="subject-card"
+                    key={semester}
+                    onClick={() => setSelectedSemester(semester)}
+                  >
+                    <IconTile
+                      icon={BookMarked}
+                      color="#2563EB"
+                      background="#EAF1FF"
                     />
-                  ) : (
-                    <div className="lesson-list">
-                      {visibleCourses.map(course => (
-                        <div className="lesson-card" key={course.id}>
-                          <IconTile
-                            icon={FileText}
-                            color="#DC2626"
-                            background="#FEECEC"
-                            size={23}
-                          />
+                    <h3>Semestre {semester}</h3>
+                    <p>{selectedYear}{selectedYear === 1 ? "ère" : "e"} année</p>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <button
+              className="outline-button"
+              onClick={() => setSelectedSemester(null)}
+            >
+              ← Retour aux semestres
+            </button>
 
-                          <div className="lesson-info">
-                            <h3>{course.titre}</h3>
+            <div className="subject-grid">
+              {availableSubjects
+                .filter(subject => {
+                  const semesterNumber = Number(
+                    String(subject.semestre || "").match(/\d+/)?.[0]
+                  );
+                  return (
+                    semesterNumber === selectedSemester &&
+                    (!filterUniversity ||
+                      subject.universite === filterUniversity) &&
+                    (!filterLevel ||
+                      subject.niveau === filterLevel)
+                  );
+                })
+                .map(subject => {
+                  const count = courses.filter(course =>
+                    course.matiere_id === subject.id ||
+                    course.matiereId === subject.id
+                  ).length;
 
-                            <p>
-                              {course.matiere} · {course.niveau}
-                              {course.semestre
-                                ? ` · ${course.semestre}`
-                                : ""}
-                            </p>
+                  return (
+                    <div className="subject-card" key={subject.id}>
+                      <button
+                        className="subject-main"
+                        onClick={() => setSelectedSubject(subject)}
+                      >
+                        <IconTile
+                          icon={BookMarked}
+                          color="#2563EB"
+                          background="#EAF1FF"
+                        />
+                        <h3>{subject.nom}</h3>
+                        <p>{subject.universite} · {subject.niveau}</p>
+                        <span>Semestre {selectedSemester}</span>
+                      </button>
 
-                            {course.description && (
-                              <p>{course.description}</p>
-                            )}
-                          </div>
+                      <div className="subject-footer">
+                        <span>{count} cours</span>
+                        <ChevronRight size={17} />
+                      </div>
 
-                          <div className="lesson-actions">
-  <button
-    className="primary-button"
-    onClick={() => ouvrirCours(course)}
-  >
-    <ExternalLink size={15} />
-    Ouvrir
-  </button>
-
-  <button
-    className="outline-button"
-    onClick={() => telechargerCours(course)}
-  >
-    <Download size={15} />
-    Télécharger
-  </button>
-</div>
-
-                          {isAdmin && (
-                            <button
-                              className="icon-button danger"
-                              onClick={() =>
-                                supprimerElement("cours", course.id)
-                              }
-                            >
-                              <Trash2 size={17} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                      {isAdmin && (
+                        <button
+                          className="delete-subject"
+                          onClick={() =>
+                            supprimerElement("matieres", subject.id)
+                          }
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
-                  )}
-                </section>
-              </>
-            )}
+                  );
+                })}
+            </div>
+          </>
+        )}
+      </>
+    )}
+
+    {/* LEÇONS */}
+    {selectedSubject && (
+      <>
+        <button
+          className="outline-button"
+          onClick={() => setSelectedSubject(null)}
+        >
+          ← Retour aux matières
+        </button>
+
+        <section className="content-section">
+          <div className="section-heading">
+            <div>
+              <h2>{selectedSubject.nom}</h2>
+              <p>Leçons disponibles dans cette matière.</p>
+            </div>
+          </div>
+
+          {courses.filter(course =>
+            course.matiere_id === selectedSubject.id ||
+            course.matiereId === selectedSubject.id
+          ).length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="Aucun cours disponible"
+              description="Aucune leçon n'est encore enregistrée dans cette matière."
+            />
+          ) : (
+            <div className="lesson-list">
+              {courses
+                .filter(course =>
+                  course.matiere_id === selectedSubject.id ||
+                  course.matiereId === selectedSubject.id
+                )
+                .filter(course =>
+                  !search ||
+                  normalize(course.titre || course.title)
+                    .includes(normalize(search))
+                )
+                .map(course => (
+                  <div className="lesson-card" key={course.id}>
+                    <IconTile
+                      icon={FileText}
+                      color="#DC2626"
+                      background="#FEECEC"
+                      size={23}
+                    />
+
+                    <div className="lesson-info">
+                      <h3>{course.titre}</h3>
+                      <p>
+                        {course.matiere} · {course.niveau}
+                        {course.semestre ? ` · ${course.semestre}` : ""}
+                      </p>
+                      {course.description && (
+                        <p>{course.description}</p>
+                      )}
+                    </div>
+
+                    <div className="lesson-actions">
+                      <button
+                        className="primary-button"
+                        onClick={() => ouvrirCours(course)}
+                      >
+                        <ExternalLink size={15} />
+                        Ouvrir
+                      </button>
+
+                      <button
+                        className="outline-button"
+                        onClick={() => telechargerCours(course)}
+                      >
+                        <Download size={15} />
+                        Télécharger
+                      </button>
+                    </div>
+
+                    {isAdmin && (
+                      <button
+                        className="icon-button danger"
+                        onClick={() =>
+                          supprimerElement("cours", course.id)
+                        }
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+        </section>
+      </>
+    )}
+
+  </div>
+)}
 
             {/* =========================================
                 EXAMENS
