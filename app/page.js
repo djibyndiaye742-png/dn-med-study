@@ -733,13 +733,15 @@ async function ajouterLecon(e) {
   }
 
   for (const file of files) {
-    const isPdf =
-      file.type === "application/pdf" ||
-      file.name.toLowerCase().endsWith(".pdf");
+  const extension = file.name.split(".").pop().toLowerCase();
 
-    if (!isPdf) {
-      return alert(`${file.name} n'est pas un PDF.`);
-    }
+  const formatAutorise = ["pdf", "ppt", "pptx"].includes(extension);
+
+  if (!formatAutorise) {
+    return alert(
+      `${file.name} : format refusé. Utilise PDF, PPT ou PPTX.`
+    );
+  }
   }
 
   setBusy(true);
