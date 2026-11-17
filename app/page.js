@@ -646,51 +646,87 @@ setSearch("");
     }
   }
 
-  /* PUBLIER UNE LEÇON */
+  /* PUBLIER UNE OU PLUSIEURS LEÇONS */
 
-  async function ajouterLecon(e) {
-    e.preventDefault();
+async function ajouterLecon(e) {
+  e.preventDefault();
 
-    if (!isAdmin) return;
+  if (!isAdmin) return;
 
-    const subject = subjects.find(
-      s => s.id === courseForm.matiereId
-    );
+  const subject = subjects.find(
+    s => s.id === courseForm.matiereId
+  );
 
-    if (!subject) {
-      return alert("Sélectionne une matière.");
+  if (!subject) {
+    return alert("Sélectionne une matière.");
+  }
+
+  const files = lessonFiles;
+  const titreManuel = courseForm.titre.trim();
+
+  if (files.length === 0 && !titreManuel) {
+    return alert("Ajoute le titre de la leçon.");
+  }
+
+  if (files.length === 0 && !courseForm.url.trim()) {
+    return alert("Choisis un PDF ou ajoute un lien PDF.");
+  }
+
+  if (files.length === 1 && !titreManuel) {
+    return alert("Ajoute le titre de la leçon.");
+  }
+
+  for (const file of files) {
+    const isPdf =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+
+    if (!isPdf) {
+      return alert(`${file.name} n'est pas un PDF.`);
     }
+  }
 
-    if (!courseForm.titre.trim()) {
-      return alert("Ajoute le titre de la leçon.");
-    }
+  setBusy(true);
+  setUploadProgress(0);
 
-    if (!lessonFile && !courseForm.url.trim()) {
-      return alert("Choisis un PDF ou ajoute un lien PDF.");
-    }
+  try {
+    const payloads = [];
 
-    if (lessonFile) {
-      const isPdf =
-        lessonFile.type === "application/pdf" ||
-        lessonFile.name.toLowerCase().endsWith(".pdf");
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
 
-      if (!isPdf) {
-        return alert("Le fichier doit être au format PDF.");
+        const pdfUrl = await envoyerPDF(file);
+
+        const titreFichier = file.name
+          .replace(/\.pdf$/i, "")
+          .trim();
+
+        payloads.push({
+          titre: files.length === 1
+            ? titreManuel
+            : titreFichier,
+          matiere: subject.nom,
+          matiere_id: subject.id,
+          universite: subject.universite,
+          filiere: subject.filiere,
+          niveau: subject.niveau,
+          semestre: subject.semestre,
+          description: courseForm.description.trim(),
+          url: pdfUrl,
+          pdf_url: pdfUrl,
+          created_by: user.id
+        });
+
+        setUploadProgress(
+          Math.round(((i + 1) / files.length) * 100)
+        );
       }
-    }
+    } else {
+      const pdfUrl = courseForm.url.trim();
 
-    setBusy(true);
-    setUploadProgress(0);
-
-    try {
-      let pdfUrl = courseForm.url.trim();
-
-      if (lessonFile) {
-        pdfUrl = await envoyerPDF(lessonFile);
-      }
-
-      const payload = {
-        titre: courseForm.titre.trim(),
+      payloads.push({
+        titre: titreManuel,
         matiere: subject.nom,
         matiere_id: subject.id,
         universite: subject.universite,
@@ -701,43 +737,44 @@ setSearch("");
         url: pdfUrl,
         pdf_url: pdfUrl,
         created_by: user.id
-      };
-
-      const { error } = await supabase
-        .from("cours")
-        .insert(payload);
-
-      if (error) throw error;
-
-      setCourseForm({
-        titre: "",
-        matiereId: "",
-        url: "",
-        description: ""
       });
-
-      setLessonFile(null);
-      setUploadProgress(0);
-      setModal("");
-
-      await chargerDonnees();
-
-      alert("Leçon publiée avec succès.");
-
-    } catch (error) {
-      console.error("Erreur publication PDF :", error);
-
-      alert(
-        `Publication refusée : ${
-          error.message ||
-          "Vérifie Supabase Storage et les politiques RLS."
-        }`
-      );
-
-    } finally {
-      setBusy(false);
-      setUploading(false);
     }
+
+    const { error } = await supabase
+      .from("cours")
+      .insert(payloads);
+
+    if (error) throw error;
+
+    setCourseForm({
+      titre: "",
+      matiereId: "",
+      url: "",
+      description: ""
+    });
+
+    setLessonFiles([]);
+    setUploadProgress(0);
+    setModal("");
+
+    await chargerDonnees();
+
+    alert(`${payloads.length} cours publiés avec succès !`);
+
+  } catch (error) {
+    console.error("Erreur publication PDF :", error);
+
+    alert(
+      `Publication refusée : ${
+        error.message ||
+        "Vérifie Supabase Storage et les politiques RLS."
+      }`
+    );
+
+  } finally {
+    setBusy(false);
+    setUploading(false);
+  }
   }
 
   /* AJOUTER UN EXAMEN */
