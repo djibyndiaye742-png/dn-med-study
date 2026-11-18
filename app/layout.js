@@ -1,4 +1,5 @@
 import "./globals.css";
+import ServiceWorker from "./ServiceWorker";
 
 export const metadata = {
   metadataBase: new URL("https://dn-med-study.vercel.app"),
@@ -23,6 +24,10 @@ export const metadata = {
 
   applicationName: "DN Med Study",
 
+  icons: {
+    icon: "/icon.svg",
+  },
+
   robots: {
     index: true,
     follow: true,
@@ -39,10 +44,19 @@ export const metadata = {
   },
 };
 
+export const viewport = {
+  themeColor: "#10243A",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="fr">
-      <body>{children}</body>
+      <body>
+        <ServiceWorker />
+        {children}
+      </body>
     </html>
   );
 }
