@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="110" fill="#10243A"/>
+  <circle cx="256" cy="256" r="170" fill="#2563EB"/>
+  <path d="M225 135h62v90h90v62h-90v90h-62v-90h-90v-62h90z" fill="#FFFFFF"/>
+  <text x="256" y="440" font-size="38" font-weight="bold" text-anchor="middle" fill="#FFFFFF">DN MED</text>
+</svg>
