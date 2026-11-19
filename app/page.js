@@ -212,125 +212,246 @@ function Modal({ title, children, onClose }) {
   );
 }
 
+
 function parseQCMResult(content) {
   if (!content) return null;
-  let raw = String(content).trim();
-  raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
+
   try {
-    const parsed = JSON.parse(raw.slice(start, end + 1));
-    const questions = Array.isArray(parsed) ? parsed : parsed.questions || parsed.qcm || parsed.items;
-    if (!Array.isArray(questions) || !questions.length) return null;
-    return questions.map((q, index) => {
-      const sourceOptions = q.options || q.choices || q.propositions || {};
-      const options = Array.isArray(sourceOptions)
-        ? sourceOptions.map((option, i) => ({
-            letter: String(option.letter || option.label || String.fromCharCode(65 + i)).toUpperCase(),
-            text: String(option.text || option.value || option.proposition || option)
-          }))
-        : Object.entries(sourceOptions).map(([letter, text]) => ({ letter: letter.toUpperCase(), text: String(text) }));
-      const correct = q.correctAnswers || q.correct_answers || q.correctAnswer || q.answer || q.reponse || [];
-      const correctAnswers = (Array.isArray(correct) ? correct : [correct])
-        .map(value => String(value).toUpperCase().trim())
-        .map(value => value.match(/[A-D]/)?.[0])
-        .filter(Boolean);
+    let raw = String(content).trim();
+    raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const start = raw.indexOf("{");
+      const end = raw.lastIndexOf("}");
+      if (start < 0 || end <= start) return null;
+      parsed = JSON.parse(raw.slice(start, end + 1));
+    }
+
+    if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+      return null;
+    }
+
+    const questions = parsed.questions.map((question, index) => {
+      const options = Array.isArray(question.options)
+        ? Object.fromEntries(question.options.map((option, optionIndex) => [
+            option.letter || String.fromCharCode(65 + optionIndex),
+            option.text || option.value || ""
+          ]))
+        : question.options || {};
+
+      const correctAnswers = question.correctAnswers ||
+        question.correct_answers ||
+        question.reponses_correctes ||
+        (question.answer ? [question.answer] : []);
+
       return {
-        id: q.id || index + 1,
-        question: q.question || q.enonce || q.text || `Question ${index + 1}`,
-        type: q.type || (correctAnswers.length > 1 ? "multiple" : "single"),
+        id: question.id || `q-${index + 1}`,
+        question: question.question || question.enonce || `Question ${index + 1}`,
+        type: question.type === "multiple" || question.multiple === true
+          ? "multiple"
+          : "single",
         options,
-        correctAnswers,
-        explanation: q.explanation || q.explication || q.justification || ""
+        correctAnswers: (Array.isArray(correctAnswers)
+          ? correctAnswers
+          : [correctAnswers]
+        ).map(value => String(value).trim().toUpperCase()),
+        explanation: question.explanation || question.explication || "",
       };
-    }).filter(q => q.options.length && q.correctAnswers.length);
+    }).filter(question =>
+      question.question &&
+      Object.keys(question.options).length >= 2 &&
+      question.correctAnswers.length > 0
+    );
+
+    return questions.length ? { title: parsed.title || "Entraînement QCM", questions } : null;
   } catch (error) {
+    console.warn("Format QCM non reconnu :", error);
     return null;
   }
 }
 
+
+function StudyResult({ content, kind }) {
+  const lines = String(content || '').replace(/\r/g, '').split('\n');
+  const blocks = [];
+  let paragraph = [];
+  let list = [];
+  let listType = '';
+  const flushParagraph = () => { if (paragraph.length) { blocks.push({type:'p', text:paragraph.join(' ')}); paragraph=[]; } };
+  const flushList = () => { if (list.length) { blocks.push({type:listType, items:list}); list=[]; listType=''; } };
+  const inline = (value) => value.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part,i) => part.startsWith('**') && part.endsWith('**') ? <strong key={i}>{part.slice(2,-2)}</strong> : part.startsWith('`') && part.endsWith('`') ? <code key={i}>{part.slice(1,-1)}</code> : part);
+  lines.forEach((raw) => {
+    const line = raw.trim();
+    if (!line) { flushParagraph(); flushList(); return; }
+    const heading = line.match(/^(#{1,3})\s+(.+)$/) || line.match(/^\*\*(.+)\*\*:?$/);
+    if (heading) { flushParagraph(); flushList(); blocks.push({type:'h', level:heading[2] ? heading[1].length : 2, text:heading[2] || heading[1]}); return; }
+    const numbered = line.match(/^\d+[.)]\s+(.+)$/);
+    const bullet = line.match(/^[-*•]\s+(.+)$/);
+    if (numbered || bullet) { flushParagraph(); const type=numbered?'ol':'ul'; if (list.length && listType!==type) flushList(); listType=type; list.push(numbered?numbered[1]:bullet[1]); return; }
+    flushList(); paragraph.push(line);
+  });
+  flushParagraph(); flushList();
+  const label = kind === 'resume' ? 'FICHE DE RÉVISION' : kind === 'flashcards' ? 'CARTES DE MÉMORISATION' : 'EXPLICATION PÉDAGOGIQUE';
+  return <article className={`study-result study-${kind || 'default'}`}>
+    <div className="study-result-label">{label}</div>
+    {blocks.map((block,i) => block.type==='h' ? (block.level===1 ? <h2 key={i}>{inline(block.text)}</h2> : <h3 key={i}>{inline(block.text)}</h3>) : block.type==='p' ? <p key={i}>{inline(block.text)}</p> : block.type==='ol' ? <ol key={i}>{block.items.map((item,j)=><li key={j}>{inline(item)}</li>)}</ol> : <ul key={i}>{block.items.map((item,j)=><li key={j}>{inline(item)}</li>)}</ul>)}
+  </article>;
+}
+
 function QCMResult({ content }) {
-  const questions = useMemo(() => parseQCMResult(content), [content]);
+  const quiz = useMemo(() => parseQCMResult(content), [content]);
   const [answers, setAnswers] = useState({});
-  const [checked, setChecked] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [verified, setVerified] = useState({});
 
-  useEffect(() => {
-    setAnswers({});
-    setChecked(false);
-    setShowAll(false);
-  }, [content]);
-
-  if (!questions?.length) {
+  if (!quiz) {
     return <div className="result-content">{content}</div>;
   }
 
-  const score = questions.reduce((total, q) => {
-    const selected = answers[q.id] || [];
-    const correct = [...q.correctAnswers].sort().join(",");
-    return total + ([...selected].sort().join(",") === correct ? 1 : 0);
-  }, 0);
+  const total = quiz.questions.length;
+  const verifiedCount = Object.keys(verified).length;
+  const correctCount = quiz.questions.filter((question, index) => {
+    if (!verified[index]) return false;
+    const selected = answers[index] || [];
+    return selected.length === question.correctAnswers.length &&
+      selected.every(answer => question.correctAnswers.includes(answer));
+  }).length;
+  const progress = Math.round((verifiedCount / total) * 100);
 
-  function toggleAnswer(question, letter) {
-    if (checked) return;
-    setAnswers(previous => {
-      const current = previous[question.id] || [];
-      const next = question.type === "multiple"
-        ? (current.includes(letter) ? current.filter(x => x !== letter) : [...current, letter])
-        : [letter];
-      return { ...previous, [question.id]: next };
+  function toggleAnswer(questionIndex, letter, type) {
+    if (verified[questionIndex]) return;
+
+    setAnswers(current => {
+      const selected = current[questionIndex] || [];
+      const next = type === "single"
+        ? [letter]
+        : selected.includes(letter)
+          ? selected.filter(item => item !== letter)
+          : [...selected, letter];
+
+      return { ...current, [questionIndex]: next };
     });
   }
 
+  function verifyAnswer(questionIndex) {
+    if (!(answers[questionIndex] || []).length) return;
+    setVerified(current => ({ ...current, [questionIndex]: true }));
+  }
+
+  function resetQuiz() {
+    setAnswers({});
+    setVerified({});
+  }
+
   return (
-    <div className="qcm-result">
-      <div className="qcm-toolbar">
-        <strong>{questions.length} questions</strong>
-        {checked && <strong className="qcm-score">Score : {score}/{questions.length}</strong>}
+    <div className="qcm-experience">
+      <div className="qcm-summary">
+        <div>
+          <span className="qcm-kicker">ENTRAÎNEMENT PERSONNALISÉ</span>
+          <h3>{quiz.title}</h3>
+          <p>{total} questions · {total * 4} propositions à examiner</p>
+        </div>
+        <div className="qcm-score">
+          <strong>{correctCount}<small>/{total}</small></strong>
+          <span>Bonnes réponses</span>
+        </div>
       </div>
-      {questions.map((q, index) => {
-        const selected = answers[q.id] || [];
-        const isCorrect = [...selected].sort().join(",") === [...q.correctAnswers].sort().join(",");
+
+      <div className="qcm-progress">
+        <div className="qcm-progress-label">
+          <span>Progression</span>
+          <strong>{verifiedCount}/{total} corrigées</strong>
+        </div>
+        <div className="qcm-progress-track">
+          <div className="qcm-progress-fill" style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+
+      {quiz.questions.map((question, index) => {
+        const selected = answers[index] || [];
+        const isVerified = Boolean(verified[index]);
+        const isCorrect = selected.length === question.correctAnswers.length &&
+          selected.every(answer => question.correctAnswers.includes(answer));
+        const letters = Object.keys(question.options).sort();
+
         return (
-          <article className="qcm-card" key={q.id}>
-            <h3>{index + 1}. {q.question}</h3>
-            {q.type === "multiple" && <p className="qcm-hint">Plusieurs réponses possibles.</p>}
+          <article className={`qcm-card ${isVerified ? (isCorrect ? "qcm-card-correct" : "qcm-card-wrong") : ""}`} key={question.id}>
+            <div className="qcm-card-top">
+              <span className="qcm-number">QUESTION {String(index + 1).padStart(2, "0")}</span>
+              <span className={`qcm-type ${question.type}`}>
+                {question.type === "multiple" ? "Plusieurs réponses" : "Une seule réponse"}
+              </span>
+            </div>
+
+            <h4 className="qcm-question">{question.question}</h4>
+
             <div className="qcm-options">
-              {q.options.map(option => {
-                const active = selected.includes(option.letter);
-                const isRight = q.correctAnswers.includes(option.letter);
-                let className = active ? "qcm-option selected" : "qcm-option";
-                if (checked && isRight) className += " correct";
-                else if (checked && active && !isRight) className += " incorrect";
+              {letters.map(letter => {
+                const chosen = selected.includes(letter);
+                const correct = question.correctAnswers.includes(letter);
+                let stateClass = chosen ? "chosen" : "";
+                if (isVerified && correct) stateClass = "option-correct";
+                else if (isVerified && chosen && !correct) stateClass = "option-wrong";
+
                 return (
-                  <button type="button" key={option.letter} className={className}
-                    onClick={() => toggleAnswer(q, option.letter)} disabled={checked}>
-                    <span>{option.letter}</span><span>{option.text}</span>
+                  <button
+                    type="button"
+                    key={letter}
+                    className={`qcm-option ${stateClass}`}
+                    onClick={() => toggleAnswer(index, letter, question.type)}
+                    disabled={isVerified}
+                    aria-pressed={chosen}
+                  >
+                    <span className="qcm-letter">{letter}</span>
+                    <span className="qcm-option-text">{question.options[letter]}</span>
+                    {isVerified && correct && <CheckCircle2 size={19} className="qcm-option-icon" />}
+                    {isVerified && chosen && !correct && <X size={19} className="qcm-option-icon" />}
                   </button>
                 );
               })}
             </div>
-            {checked && (
-              <div className={`qcm-explanation ${isCorrect ? "good" : "bad"}`}>
-                <strong>{isCorrect ? "Bonne réponse" : `Réponse correcte : ${q.correctAnswers.join(", ")}`}</strong>
-                {q.explanation && <p>{q.explanation}</p>}
+
+            {!isVerified ? (
+              <button
+                type="button"
+                className="qcm-correct-button"
+                onClick={() => verifyAnswer(index)}
+                disabled={selected.length === 0}
+              >
+                Vérifier ma réponse
+                <ChevronRight size={17} />
+              </button>
+            ) : (
+              <div className={`qcm-explanation ${isCorrect ? "success" : "error"}`}>
+                <div className="qcm-explanation-title">
+                  {isCorrect ? <CheckCircle2 size={19} /> : <Brain size={19} />}
+                  <strong>{isCorrect ? "Excellente réponse !" : "Correction"}</strong>
+                </div>
+                <p>
+                  <b>Réponse{question.correctAnswers.length > 1 ? "s" : ""} correcte{question.correctAnswers.length > 1 ? "s" : ""} : </b>
+                  {question.correctAnswers.join(", ")}
+                </p>
+                {question.explanation && <p>{question.explanation}</p>}
               </div>
             )}
           </article>
         );
       })}
-      <div className="qcm-footer">
-        {!checked ? (
-          <button type="button" className="primary-button" onClick={() => setChecked(true)}>
-            Vérifier mes réponses
+
+      {verifiedCount === total && (
+        <div className="qcm-final-result">
+          <div className="qcm-final-icon"><GraduationCap size={27} /></div>
+          <div>
+            <strong>Entraînement terminé</strong>
+            <p>Tu as obtenu {correctCount} bonne{correctCount > 1 ? "s" : ""} réponse{correctCount > 1 ? "s" : ""} sur {total}.</p>
+          </div>
+          <button type="button" className="outline-button" onClick={resetQuiz}>
+            <RefreshCw size={15} /> Recommencer
           </button>
-        ) : (
-          <button type="button" className="primary-button" onClick={() => { setAnswers({}); setChecked(false); }}>
-            Recommencer le QCM
-          </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1114,7 +1235,6 @@ alert("Impossible de télécharger ce document. Réessaie.");
 
     setBusy(true);
     setAiResult("");
-    setAiResultAction("");
     setAiSources([]);
 
     try {
@@ -1198,7 +1318,7 @@ const response = await fetch("/api/ia", {
 
   function ouvrirResultat(item) {
     setAiResult(item.resultat || item.contenu || "");
-    setAiResultAction(item.type === "question" ? "question" : item.type || "");
+    setAiResultAction(item.type === "question" ? "question" : item.type);
     setAiSources([]);
     setActive("ai");
   }
@@ -2339,17 +2459,21 @@ const response = await fetch("/api/ia", {
                       {aiResultAction === "qcm" ? (
                         <QCMResult content={aiResult} />
                       ) : (
-                        <div className="result-content">{aiResult}</div>
+                        <StudyResult content={aiResult} kind={aiResultAction} />
                       )}
 
                       {aiSources.length > 0 && (
-                        <div className="ai-sources">
-                          <h3>Sources consultées</h3>
+                        <div className="ai-source-list">
+                          <strong>Sources consultées</strong>
                           {aiSources.map((source, index) => (
-                            <a key={`${source.uri || source.url || index}`} href={source.uri || source.url}
-                              target="_blank" rel="noreferrer">
+                            <a
+                              key={`${source.uri || source.url}-${index}`}
+                              href={source.uri || source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
                               <ExternalLink size={14} />
-                              {source.title || source.uri || source.url || `Source ${index + 1}`}
+                              {source.title || source.uri || source.url}
                             </a>
                           ))}
                         </div>
@@ -3589,6 +3713,26 @@ onChange={e => {
 
         .result-header h2 { font-size: 18px; margin: 0; }
 
+
+        .study-result { margin-top:15px; padding:22px; border:1px solid #E2E8F0; border-radius:15px; background:#F8FAFC; color:#334155; font-size:14px; line-height:1.8; overflow-wrap:anywhere; }
+        .study-result-label { display:inline-block; margin-bottom:15px; padding:5px 9px; border-radius:7px; background:#E8F1FF; color:#2563EB; font-size:9px; font-weight:900; letter-spacing:1px; }
+        .study-result h2 { margin:18px 0 10px; color:#17345A; font-size:20px; line-height:1.35; }
+        .study-result h3 { margin:17px 0 8px; color:#2563EB; font-size:16px; line-height:1.4; }
+        .study-result p { margin:0 0 12px; }
+        .study-result ul,.study-result ol { margin:7px 0 15px; padding-left:23px; }
+        .study-result li { margin:5px 0; padding-left:3px; }
+        .study-result strong { color:#172B43; font-weight:800; }
+        .study-result code { padding:2px 5px; border-radius:5px; background:#E2E8F0; }
+        .study-flashcards { border-top:3px solid #8B5CF6; }
+        .study-resume { border-top:3px solid #2563EB; }
+        .study-chat { border-top:3px solid #06B6D4; }
+        .dark-mode .study-result { background:#172538; border-color:#334155; color:#D5DFEA; }
+        .dark-mode .study-result h2,.dark-mode .study-result strong { color:#F1F5F9; }
+        .dark-mode .study-result h3 { color:#7CB7FF; }
+        .dark-mode .study-result-label { background:#243D5C; color:#93C5FD; }
+        .dark-mode .study-result code { background:#334155; }
+        @media(max-width:600px) { .study-result { padding:16px; font-size:13px; } .study-result h2 { font-size:18px; } .study-result h3 { font-size:15px; } }
+
         .result-content {
           white-space: pre-wrap;
           line-height: 1.8;
@@ -3602,34 +3746,79 @@ onChange={e => {
         }
 
 
-        .qcm-result { display: grid; gap: 16px; margin-top: 16px; }
-        .qcm-toolbar { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: #334155; }
-        .qcm-score { color: #059669; }
-        .qcm-card { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 13px; padding: 18px; }
-        .qcm-card h3 { margin: 0 0 12px; color: #172B43; font-size: 15px; line-height: 1.6; }
-        .qcm-hint { margin: -5px 0 12px; color: #64748B; font-size: 12px; }
+        .qcm-experience { display: grid; gap: 18px; margin-top: 16px; }
+        .qcm-summary {
+          display: flex; justify-content: space-between; align-items: center; gap: 18px;
+          padding: 22px; border: 1px solid #DCE8F8; border-radius: 17px;
+          background: linear-gradient(135deg, #F2F7FF 0%, #FFFFFF 70%);
+        }
+        .qcm-kicker { color: #2563EB; font-size: 10px; font-weight: 900; letter-spacing: 1.2px; }
+        .qcm-summary h3 { margin: 7px 0 5px; color: #172B43; font-size: 19px; }
+        .qcm-summary p { margin: 0; color: #718096; font-size: 12px; }
+        .qcm-score {
+          min-width: 94px; padding: 12px; border-radius: 14px; text-align: center;
+          background: #FFFFFF; border: 1px solid #DCE8F8;
+        }
+        .qcm-score strong { display: block; color: #2563EB; font-size: 27px; line-height: 1.1; }
+        .qcm-score small { color: #8291A5; font-size: 15px; }
+        .qcm-score span { display: block; margin-top: 5px; color: #718096; font-size: 9px; font-weight: 700; }
+        .qcm-progress { padding: 0 3px; }
+        .qcm-progress-label { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: #64748B; font-size: 11px; }
+        .qcm-progress-label strong { color: #2563EB; }
+        .qcm-progress-track { height: 7px; border-radius: 20px; overflow: hidden; background: #E8EEF6; }
+        .qcm-progress-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563EB, #06B6D4); transition: width .25s ease; }
+        .qcm-card {
+          padding: 20px; border: 1px solid #E4EAF2; border-radius: 16px;
+          background: #FFFFFF; box-shadow: 0 5px 18px #19365A08;
+        }
+        .qcm-card-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+        .qcm-number { color: #2563EB; font-size: 10px; font-weight: 900; letter-spacing: 1px; }
+        .qcm-type { padding: 6px 9px; border-radius: 20px; color: #53657B; background: #F1F5F9; font-size: 9px; font-weight: 800; }
+        .qcm-type.multiple { color: #7C3AED; background: #F3EFFF; }
+        .qcm-question { margin: 0 0 17px; color: #172B43; font-size: 15px; line-height: 1.65; }
         .qcm-options { display: grid; gap: 9px; }
-        .qcm-option { display: flex; align-items: flex-start; gap: 10px; text-align: left; width: 100%; border: 1px solid #D9E2EC; background: white; color: #334155; border-radius: 9px; padding: 11px; cursor: pointer; }
-        .qcm-option > span:first-child { display: grid; place-items: center; flex: 0 0 25px; height: 25px; border-radius: 7px; background: #EEF2F7; font-weight: 800; font-size: 12px; }
-        .qcm-option.selected { border-color: #2563EB; background: #EFF6FF; }
-        .qcm-option.correct { border-color: #10B981; background: #ECFDF5; }
-        .qcm-option.incorrect { border-color: #EF4444; background: #FEF2F2; }
-        .qcm-option:disabled { cursor: default; opacity: 1; }
-        .qcm-explanation { margin-top: 12px; padding: 12px; border-radius: 9px; font-size: 13px; }
-        .qcm-explanation p { margin: 6px 0 0; line-height: 1.6; }
-        .qcm-explanation.good { background: #ECFDF5; color: #065F46; }
-        .qcm-explanation.bad { background: #FEF2F2; color: #991B1B; }
-        .qcm-footer { display: flex; justify-content: flex-end; }
-        .ai-sources { display: grid; gap: 9px; margin-top: 18px; }
-        .ai-sources h3 { margin: 0; font-size: 14px; }
-        .ai-sources a { display: flex; align-items: center; gap: 8px; color: #2563EB; font-size: 12px; overflow-wrap: anywhere; }
-        .dark-mode .qcm-card { background: #10243A; border-color: #354A60; }
-        .dark-mode .qcm-card h3, .dark-mode .qcm-toolbar { color: #E5EDF7; }
-        .dark-mode .qcm-option { background: #192A3C; color: #E5EDF7; border-color: #354A60; }
-        .dark-mode .qcm-option.selected { background: #17365D; border-color: #60A5FA; }
-        .dark-mode .qcm-option.correct { background: #064E3B; border-color: #10B981; }
-        .dark-mode .qcm-option.incorrect { background: #7F1D1D; border-color: #EF4444; }
-        .dark-mode .qcm-option > span:first-child { background: #354A60; }
+        .qcm-option {
+          display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px;
+          padding: 10px 13px; border: 1px solid #E1E8F0; border-radius: 12px;
+          background: #FFFFFF; color: #334155; text-align: left; cursor: pointer;
+          transition: border-color .15s ease, background .15s ease, transform .15s ease;
+        }
+        .qcm-option:not(:disabled):hover { border-color: #93B8F8; background: #F7FAFF; transform: translateY(-1px); }
+        .qcm-letter {
+          display: grid; place-items: center; flex: 0 0 29px; height: 29px;
+          border-radius: 9px; background: #EFF4FB; color: #526579; font-size: 11px; font-weight: 900;
+        }
+        .qcm-option-text { flex: 1; font-size: 12px; line-height: 1.5; }
+        .qcm-option.chosen { border-color: #5B91ED; background: #EFF6FF; }
+        .qcm-option.chosen .qcm-letter { color: #FFFFFF; background: #2563EB; }
+        .qcm-option.option-correct { border-color: #6AC69A; background: #ECFDF3; color: #166534; }
+        .qcm-option.option-correct .qcm-letter { color: #FFFFFF; background: #16A34A; }
+        .qcm-option.option-wrong { border-color: #F0A1A1; background: #FFF1F2; color: #9F1239; }
+        .qcm-option.option-wrong .qcm-letter { color: #FFFFFF; background: #E11D48; }
+        .qcm-option-icon { flex: 0 0 auto; }
+        .qcm-correct-button {
+          display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+          margin-top: 15px; padding: 11px 15px; border: 0; border-radius: 10px;
+          background: #2563EB; color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;
+        }
+        .qcm-correct-button:disabled { opacity: .4; cursor: not-allowed; }
+        .qcm-explanation { margin-top: 15px; padding: 14px; border-radius: 12px; font-size: 12px; line-height: 1.65; }
+        .qcm-explanation.success { color: #166534; background: #F0FDF4; border: 1px solid #BBF7D0; }
+        .qcm-explanation.error { color: #9F1239; background: #FFF1F2; border: 1px solid #FECDD3; }
+        .qcm-explanation-title { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+        .qcm-explanation p { margin: 5px 0 0; }
+        .qcm-final-result {
+          display: flex; align-items: center; gap: 13px; padding: 17px;
+          border: 1px solid #C7E6D5; border-radius: 14px; background: #F0FDF4;
+        }
+        .qcm-final-icon { display: grid; place-items: center; width: 43px; height: 43px; flex: 0 0 43px; border-radius: 12px; color: #15803D; background: #DCFCE7; }
+        .qcm-final-result > div:nth-child(2) { flex: 1; }
+        .qcm-final-result strong { color: #166534; font-size: 13px; }
+        .qcm-final-result p { margin: 4px 0 0; color: #4B6B58; font-size: 11px; }
+        .ai-source-list { display: grid; gap: 9px; margin-top: 16px; padding: 15px; border: 1px solid #DCE8F8; border-radius: 12px; background: #F8FBFF; }
+        .ai-source-list > strong { color: #334155; font-size: 11px; }
+        .ai-source-list a { display: flex; align-items: center; gap: 8px; color: #2563EB; font-size: 11px; overflow-wrap: anywhere; text-decoration: none; }
+        .ai-source-list a:hover { text-decoration: underline; }
 
         .admin-card { text-align: left; color: inherit; cursor: pointer; }
 
@@ -3808,6 +3997,32 @@ onChange={e => {
           color: #E5EDF7;
         }
 
+        .dark-mode .qcm-summary,
+        .dark-mode .qcm-card,
+        .dark-mode .qcm-score,
+        .dark-mode .ai-source-list {
+          background: #192A3C;
+          border-color: #354A60;
+        }
+        .dark-mode .qcm-summary h3,
+        .dark-mode .qcm-question,
+        .dark-mode .ai-source-list > strong { color: #E5EDF7; }
+        .dark-mode .qcm-summary p,
+        .dark-mode .qcm-progress-label,
+        .dark-mode .qcm-type { color: #A9B8C8; }
+        .dark-mode .qcm-option { background: #142438; border-color: #354A60; color: #E5EDF7; }
+        .dark-mode .qcm-option.chosen { background: #1E3A5F; border-color: #60A5FA; }
+        .dark-mode .qcm-option.option-correct { background: #123B2B; border-color: #23875A; color: #BBF7D0; }
+        .dark-mode .qcm-option.option-wrong { background: #451D2A; border-color: #9F3A54; color: #FECDD3; }
+        .dark-mode .qcm-letter { background: #263B52; color: #D7E3F0; }
+        .dark-mode .qcm-explanation.success { background: #123B2B; border-color: #23875A; color: #BBF7D0; }
+        .dark-mode .qcm-explanation.error { background: #451D2A; border-color: #9F3A54; color: #FECDD3; }
+        .dark-mode .qcm-final-result { background: #123B2B; border-color: #23875A; }
+        .dark-mode .qcm-final-result strong { color: #BBF7D0; }
+        .dark-mode .qcm-final-result p { color: #A7D8BA; }
+        .dark-mode .qcm-final-icon { background: #1D5A3C; color: #BBF7D0; }
+
+
         @media (max-width: 1050px) {
           .stats-grid { grid-template-columns: repeat(2, 1fr); }
 
@@ -3891,6 +4106,14 @@ onChange={e => {
           .lesson-info { min-width: 55%; }
 
           .ai-container { padding: 17px; }
+          .qcm-summary { align-items: flex-start; padding: 16px; }
+          .qcm-score { min-width: 72px; padding: 10px 7px; }
+          .qcm-score strong { font-size: 22px; }
+          .qcm-card { padding: 15px; }
+          .qcm-card-top { align-items: flex-start; flex-direction: column; }
+          .qcm-final-result { align-items: flex-start; flex-wrap: wrap; }
+          .qcm-final-result .outline-button { width: 100%; justify-content: center; }
+
 
           .ai-actions {
             display: grid;
