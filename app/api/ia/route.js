@@ -219,12 +219,6 @@ ${question}`
       }
     };
 
-    // La recherche Google est activée uniquement pour les questions de l'étudiant.
-    // Gemini décide lui-même si une recherche externe est utile.
-    if (action === "chat") {
-      body.tools = [{ googleSearch: {} }];
-    }
-
     let lastError = null;
 
     for (const model of MODELS) {
