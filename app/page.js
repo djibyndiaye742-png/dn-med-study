@@ -212,6 +212,129 @@ function Modal({ title, children, onClose }) {
   );
 }
 
+function parseQCMResult(content) {
+  if (!content) return null;
+  let raw = String(content).trim();
+  raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    const parsed = JSON.parse(raw.slice(start, end + 1));
+    const questions = Array.isArray(parsed) ? parsed : parsed.questions || parsed.qcm || parsed.items;
+    if (!Array.isArray(questions) || !questions.length) return null;
+    return questions.map((q, index) => {
+      const sourceOptions = q.options || q.choices || q.propositions || {};
+      const options = Array.isArray(sourceOptions)
+        ? sourceOptions.map((option, i) => ({
+            letter: String(option.letter || option.label || String.fromCharCode(65 + i)).toUpperCase(),
+            text: String(option.text || option.value || option.proposition || option)
+          }))
+        : Object.entries(sourceOptions).map(([letter, text]) => ({ letter: letter.toUpperCase(), text: String(text) }));
+      const correct = q.correctAnswers || q.correct_answers || q.correctAnswer || q.answer || q.reponse || [];
+      const correctAnswers = (Array.isArray(correct) ? correct : [correct])
+        .map(value => String(value).toUpperCase().trim())
+        .map(value => value.match(/[A-D]/)?.[0])
+        .filter(Boolean);
+      return {
+        id: q.id || index + 1,
+        question: q.question || q.enonce || q.text || `Question ${index + 1}`,
+        type: q.type || (correctAnswers.length > 1 ? "multiple" : "single"),
+        options,
+        correctAnswers,
+        explanation: q.explanation || q.explication || q.justification || ""
+      };
+    }).filter(q => q.options.length && q.correctAnswers.length);
+  } catch (error) {
+    return null;
+  }
+}
+
+function QCMResult({ content }) {
+  const questions = useMemo(() => parseQCMResult(content), [content]);
+  const [answers, setAnswers] = useState({});
+  const [checked, setChecked] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    setAnswers({});
+    setChecked(false);
+    setShowAll(false);
+  }, [content]);
+
+  if (!questions?.length) {
+    return <div className="result-content">{content}</div>;
+  }
+
+  const score = questions.reduce((total, q) => {
+    const selected = answers[q.id] || [];
+    const correct = [...q.correctAnswers].sort().join(",");
+    return total + ([...selected].sort().join(",") === correct ? 1 : 0);
+  }, 0);
+
+  function toggleAnswer(question, letter) {
+    if (checked) return;
+    setAnswers(previous => {
+      const current = previous[question.id] || [];
+      const next = question.type === "multiple"
+        ? (current.includes(letter) ? current.filter(x => x !== letter) : [...current, letter])
+        : [letter];
+      return { ...previous, [question.id]: next };
+    });
+  }
+
+  return (
+    <div className="qcm-result">
+      <div className="qcm-toolbar">
+        <strong>{questions.length} questions</strong>
+        {checked && <strong className="qcm-score">Score : {score}/{questions.length}</strong>}
+      </div>
+      {questions.map((q, index) => {
+        const selected = answers[q.id] || [];
+        const isCorrect = [...selected].sort().join(",") === [...q.correctAnswers].sort().join(",");
+        return (
+          <article className="qcm-card" key={q.id}>
+            <h3>{index + 1}. {q.question}</h3>
+            {q.type === "multiple" && <p className="qcm-hint">Plusieurs réponses possibles.</p>}
+            <div className="qcm-options">
+              {q.options.map(option => {
+                const active = selected.includes(option.letter);
+                const isRight = q.correctAnswers.includes(option.letter);
+                let className = active ? "qcm-option selected" : "qcm-option";
+                if (checked && isRight) className += " correct";
+                else if (checked && active && !isRight) className += " incorrect";
+                return (
+                  <button type="button" key={option.letter} className={className}
+                    onClick={() => toggleAnswer(q, option.letter)} disabled={checked}>
+                    <span>{option.letter}</span><span>{option.text}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {checked && (
+              <div className={`qcm-explanation ${isCorrect ? "good" : "bad"}`}>
+                <strong>{isCorrect ? "Bonne réponse" : `Réponse correcte : ${q.correctAnswers.join(", ")}`}</strong>
+                {q.explanation && <p>{q.explanation}</p>}
+              </div>
+            )}
+          </article>
+        );
+      })}
+      <div className="qcm-footer">
+        {!checked ? (
+          <button type="button" className="primary-button" onClick={() => setChecked(true)}>
+            Vérifier mes réponses
+          </button>
+        ) : (
+          <button type="button" className="primary-button" onClick={() => { setAnswers({}); setChecked(false); }}>
+            Recommencer le QCM
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* =====================================================
    APPLICATION DN MED STUDY
 ===================================================== */
@@ -276,6 +399,8 @@ const [selectedSemester, setSelectedSemester] = useState(null);
 
   const [aiFile, setAiFile] = useState(null);
   const [aiResult, setAiResult] = useState("");
+  const [aiResultAction, setAiResultAction] = useState("");
+  const [aiSources, setAiSources] = useState([]);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiAction, setAiAction] = useState("resume");
 
@@ -989,6 +1114,8 @@ alert("Impossible de télécharger ce document. Réessaie.");
 
     setBusy(true);
     setAiResult("");
+    setAiResultAction("");
+    setAiSources([]);
 
     try {
       const formData = new FormData();
@@ -1036,6 +1163,8 @@ const response = await fetch("/api/ia", {
         JSON.stringify(data);
 
       setAiResult(result);
+      setAiResultAction(aiAction);
+      setAiSources(Array.isArray(data.sources) ? data.sources : []);
 
       if (user?.id) {
         const { error } = await supabase
@@ -1069,6 +1198,8 @@ const response = await fetch("/api/ia", {
 
   function ouvrirResultat(item) {
     setAiResult(item.resultat || item.contenu || "");
+    setAiResultAction(item.type === "question" ? "question" : item.type || "");
+    setAiSources([]);
     setActive("ai");
   }
 
@@ -2205,9 +2336,24 @@ const response = await fetch("/api/ia", {
                         </button>
                       </div>
 
-                      <div className="result-content">
-                        {aiResult}
-                      </div>
+                      {aiResultAction === "qcm" ? (
+                        <QCMResult content={aiResult} />
+                      ) : (
+                        <div className="result-content">{aiResult}</div>
+                      )}
+
+                      {aiSources.length > 0 && (
+                        <div className="ai-sources">
+                          <h3>Sources consultées</h3>
+                          {aiSources.map((source, index) => (
+                            <a key={`${source.uri || source.url || index}`} href={source.uri || source.url}
+                              target="_blank" rel="noreferrer">
+                              <ExternalLink size={14} />
+                              {source.title || source.uri || source.url || `Source ${index + 1}`}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -3454,6 +3600,36 @@ onChange={e => {
           margin-top: 15px;
           overflow-wrap: anywhere;
         }
+
+
+        .qcm-result { display: grid; gap: 16px; margin-top: 16px; }
+        .qcm-toolbar { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: #334155; }
+        .qcm-score { color: #059669; }
+        .qcm-card { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 13px; padding: 18px; }
+        .qcm-card h3 { margin: 0 0 12px; color: #172B43; font-size: 15px; line-height: 1.6; }
+        .qcm-hint { margin: -5px 0 12px; color: #64748B; font-size: 12px; }
+        .qcm-options { display: grid; gap: 9px; }
+        .qcm-option { display: flex; align-items: flex-start; gap: 10px; text-align: left; width: 100%; border: 1px solid #D9E2EC; background: white; color: #334155; border-radius: 9px; padding: 11px; cursor: pointer; }
+        .qcm-option > span:first-child { display: grid; place-items: center; flex: 0 0 25px; height: 25px; border-radius: 7px; background: #EEF2F7; font-weight: 800; font-size: 12px; }
+        .qcm-option.selected { border-color: #2563EB; background: #EFF6FF; }
+        .qcm-option.correct { border-color: #10B981; background: #ECFDF5; }
+        .qcm-option.incorrect { border-color: #EF4444; background: #FEF2F2; }
+        .qcm-option:disabled { cursor: default; opacity: 1; }
+        .qcm-explanation { margin-top: 12px; padding: 12px; border-radius: 9px; font-size: 13px; }
+        .qcm-explanation p { margin: 6px 0 0; line-height: 1.6; }
+        .qcm-explanation.good { background: #ECFDF5; color: #065F46; }
+        .qcm-explanation.bad { background: #FEF2F2; color: #991B1B; }
+        .qcm-footer { display: flex; justify-content: flex-end; }
+        .ai-sources { display: grid; gap: 9px; margin-top: 18px; }
+        .ai-sources h3 { margin: 0; font-size: 14px; }
+        .ai-sources a { display: flex; align-items: center; gap: 8px; color: #2563EB; font-size: 12px; overflow-wrap: anywhere; }
+        .dark-mode .qcm-card { background: #10243A; border-color: #354A60; }
+        .dark-mode .qcm-card h3, .dark-mode .qcm-toolbar { color: #E5EDF7; }
+        .dark-mode .qcm-option { background: #192A3C; color: #E5EDF7; border-color: #354A60; }
+        .dark-mode .qcm-option.selected { background: #17365D; border-color: #60A5FA; }
+        .dark-mode .qcm-option.correct { background: #064E3B; border-color: #10B981; }
+        .dark-mode .qcm-option.incorrect { background: #7F1D1D; border-color: #EF4444; }
+        .dark-mode .qcm-option > span:first-child { background: #354A60; }
 
         .admin-card { text-align: left; color: inherit; cursor: pointer; }
 
