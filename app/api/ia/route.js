@@ -79,7 +79,8 @@ export async function POST(request) {
 
     const formData = await request.formData();
     const fichier = formData.get("fichier");
-    const action = formData.get("action");
+    const actionRecue = formData.get("action");
+const action = actionRecue === "question" ? "chat" : actionRecue;
     const question = String(formData.get("question") || "");
 
     if (!fichier || typeof fichier.arrayBuffer !== "function") {
