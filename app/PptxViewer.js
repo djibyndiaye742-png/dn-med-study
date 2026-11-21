@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ReactPptxViewer } from "@extend-ai/react-pptx";
 import "@extend-ai/react-pptx/styles.css";
 
 export default function PptxViewer({ url, onClose }) {
+  const [mounted, setMounted] = useState(false);
   const [scrollElement, setScrollElement] = useState(null);
 
-  // Bloquer le défilement de la page située derrière
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
+    setMounted(true);
+
+    const oldOverflow = document.body.style.overflow;
 
     document.body.style.overflow = "hidden";
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow = oldOverflow;
     };
   }, []);
 
@@ -26,22 +29,23 @@ export default function PptxViewer({ url, onClose }) {
     }
   };
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       style={{
         position: "fixed",
         inset: 0,
         width: "100%",
-        height: "100vh",
+        height: "100%",
         height: "100dvh",
-        zIndex: 999999,
+        zIndex: 2147483647,
         background: "#111827",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
       }}
     >
-      {/* Barre supérieure */}
       <header
         style={{
           height: 56,
@@ -50,7 +54,7 @@ export default function PptxViewer({ url, onClose }) {
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 15px",
-          background: "#10243A",
+          background: "#020817",
           color: "white",
         }}
       >
@@ -74,7 +78,6 @@ export default function PptxViewer({ url, onClose }) {
         <div style={{ width: 75 }} />
       </header>
 
-      {/* Zone de défilement des diapositives */}
       <div
         ref={setScrollElement}
         style={{
@@ -104,6 +107,7 @@ export default function PptxViewer({ url, onClose }) {
           />
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
