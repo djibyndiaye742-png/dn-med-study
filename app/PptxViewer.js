@@ -96,9 +96,9 @@ export default function PptxViewer({ url, onClose }) {
           <ReactPptxViewer
             source={url}
             mode="continuous"
-            defaultZoom="automatic"
+            defaultZoom="fit-width"
             showThumbnails={false}
-            showToolbar
+            showToolbar={false}
             virtualization={{
               enabled: true,
               overscanViewport: 2,
