@@ -1,22 +1,20 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ReactPptxViewer } from "@extend-ai/react-pptx";
 import "@extend-ai/react-pptx/styles.css";
 
 export default function PptxViewer({ url, onClose }) {
+  const [scrollElement, setScrollElement] = useState(null);
 
-  // Bloquer le défilement de la page des cours
+  // Bloquer le défilement de la page située derrière
   useEffect(() => {
-    const oldOverflow = document.body.style.overflow;
-    const oldTouchAction = document.body.style.touchAction;
+    const previousOverflow = document.body.style.overflow;
 
     document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
 
     return () => {
-      document.body.style.overflow = oldOverflow;
-      document.body.style.touchAction = oldTouchAction;
+      document.body.style.overflow = previousOverflow;
     };
   }, []);
 
@@ -46,13 +44,13 @@ export default function PptxViewer({ url, onClose }) {
       {/* Barre supérieure */}
       <header
         style={{
-          height: "56px",
-          minHeight: "56px",
+          height: 56,
+          minHeight: 56,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 15px",
-          background: "#020817",
+          background: "#10243A",
           color: "white",
         }}
       >
@@ -63,7 +61,7 @@ export default function PptxViewer({ url, onClose }) {
             background: "#2563EB",
             color: "white",
             border: "none",
-            borderRadius: "8px",
+            borderRadius: 8,
             padding: "10px 16px",
             fontWeight: "bold",
           }}
@@ -73,12 +71,12 @@ export default function PptxViewer({ url, onClose }) {
 
         <strong>DN MED STUDY</strong>
 
-        <div style={{ width: "75px" }} />
+        <div style={{ width: 75 }} />
       </header>
 
-      {/* Lecteur PowerPoint */}
+      {/* Zone de défilement des diapositives */}
       <div
-        className="dn-pptx-stage"
+        ref={setScrollElement}
         style={{
           flex: 1,
           minHeight: 0,
@@ -88,27 +86,24 @@ export default function PptxViewer({ url, onClose }) {
           WebkitOverflowScrolling: "touch",
           overscrollBehavior: "contain",
           touchAction: "pan-y",
-          background: "#1f1f1f",
+          background: "#111827",
         }}
       >
-        <ReactPptxViewer
-          source={url}
-          mode="continuous"
-          defaultZoom="fit-width"
-          showThumbnails={false}
-          showToolbar
-        />
+        {scrollElement && (
+          <ReactPptxViewer
+            source={url}
+            mode="continuous"
+            defaultZoom="fit-width"
+            showThumbnails={false}
+            showToolbar
+            virtualization={{
+              enabled: true,
+              overscanViewport: 2,
+              scrollElement,
+            }}
+          />
+        )}
       </div>
-
-      <style jsx global>{`
-        .dn-pptx-stage {
-          scrollbar-width: thin;
-        }
-
-        .dn-pptx-stage * {
-          overscroll-behavior: contain;
-        }
-      `}</style>
     </div>
   );
-          }
+}
