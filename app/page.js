@@ -61,7 +61,11 @@ const TOOLS = [
 ];
 
 function normalize(value) {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function getCourseUrl(item) {
@@ -475,6 +479,7 @@ export default function HomePage() {
 
   const [search, setSearch] = useState("");
   const [filterUniversity, setFilterUniversity] = useState("");
+  const [filterFiliere, setFilterFiliere] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
   const [filterSemester, setFilterSemester] = useState("");
   const [selectedSubject, setSelectedSubject] = useState(null);
@@ -715,39 +720,113 @@ const [selectedSemester, setSelectedSemester] = useState(null);
     ].filter(Boolean))].sort();
   }, [courses, subjects]);
 
+  const filieres = useMemo(() => {
+    return [...new Set([
+      ...courses.map(c => c.filiere || c.track),
+      ...subjects.map(s => s.filiere)
+    ].filter(Boolean))].sort();
+  }, [courses, subjects]);
+
+  const courseSemesters = useMemo(() => {
+    return [...new Set([
+      ...courses.map(c => c.semestre),
+      ...subjects.map(s => s.semestre)
+    ].filter(Boolean))].sort((a, b) => {
+      const na = Number(normalize(a).match(/\d+/)?.[0] || 0);
+      const nb = Number(normalize(b).match(/\d+/)?.[0] || 0);
+      return na && nb ? na - nb : String(a).localeCompare(String(b), "fr");
+    });
+  }, [courses, subjects]);
+
   const filteredCourses = useMemo(() => {
+    const text = normalize(search);
+
     return courses.filter(course => {
-      const text = normalize(search);
+      const subject = subjects.find(item =>
+        item.id === (course.matiere_id || course.matiereId)
+      );
 
-      const matchesSearch =
-        !text ||
-        normalize(course.titre || course.title).includes(text) ||
-        normalize(course.matiere || course.subject).includes(text);
+      const courseTitle = normalize(course.titre || course.title);
+      const courseSubject = normalize(
+        course.matiere || course.subject || subject?.nom
+      );
+      const searchableText = normalize([
+        course.titre, course.title, course.matiere, course.subject,
+        course.universite, course.university, course.filiere, course.track,
+        course.niveau, course.level, course.semestre,
+        subject?.nom, subject?.universite, subject?.filiere,
+        subject?.niveau, subject?.semestre
+      ].filter(Boolean).join(" "));
 
-      const matchesUniversity =
-        !filterUniversity ||
-        (course.universite || course.university) === filterUniversity;
+      const matchesSearch = !text ||
+        searchableText.includes(text) ||
+        courseTitle.includes(text) ||
+        courseSubject.includes(text);
 
-      const matchesLevel =
-        !filterLevel ||
-        (course.niveau || course.level) === filterLevel;
+      const university = course.universite || course.university || subject?.universite;
+      const level = course.niveau || course.level || subject?.niveau;
+      const semester = course.semestre || subject?.semestre;
 
-      const matchesSemester =
-        !filterSemester ||
-        course.semestre === filterSemester;
+      const matchesUniversity = !filterUniversity ||
+        normalize(university) === normalize(filterUniversity);
+      const filiere = course.filiere || course.track || subject?.filiere;
+      const matchesFiliere = !filterFiliere ||
+        normalize(filiere) === normalize(filterFiliere);
+      const matchesLevel = !filterLevel ||
+        normalize(level) === normalize(filterLevel);
+      const matchesSemester = !filterSemester ||
+        normalize(semester) === normalize(filterSemester) ||
+        (normalize(filterSemester).includes("premier") && /\b(1|premier)\b/.test(normalize(semester))) ||
+        (normalize(filterSemester).includes("deuxieme") && /\b(2|deuxieme)\b/.test(normalize(semester)));
 
-      return matchesSearch &&
-        matchesUniversity &&
-        matchesLevel &&
-        matchesSemester;
+      return matchesSearch && matchesUniversity && matchesFiliere && matchesLevel && matchesSemester;
     });
   }, [
     courses,
+    subjects,
     search,
     filterUniversity,
+    filterFiliere,
     filterLevel,
     filterSemester
   ]);
+
+  const hasActiveCourseSearch = Boolean(
+    search.trim() || filterUniversity || filterFiliere || filterLevel || filterSemester
+  );
+
+  const searchMatchedSubjects = useMemo(() => {
+    const text = normalize(search);
+
+    return subjects.filter(subject => {
+      const relatedCourses = courses.filter(course =>
+        course.matiere_id === subject.id || course.matiereId === subject.id
+      );
+      const subjectMatchesText = !text || normalize([
+        subject.nom, subject.universite, subject.filiere,
+        subject.niveau, subject.semestre
+      ].filter(Boolean).join(" ")).includes(text);
+      const courseMatchesText = !text || relatedCourses.some(course =>
+        normalize([
+          course.titre, course.title, course.matiere, course.subject
+        ].filter(Boolean).join(" ")).includes(text)
+      );
+      const matchesUniversity = !filterUniversity ||
+        normalize(subject.universite) === normalize(filterUniversity);
+      const matchesFiliere = !filterFiliere ||
+        normalize(subject.filiere) === normalize(filterFiliere);
+      const matchesLevel = !filterLevel ||
+        normalize(subject.niveau) === normalize(filterLevel);
+      const matchesSemester = !filterSemester ||
+        normalize(subject.semestre) === normalize(filterSemester) ||
+        (normalize(filterSemester).includes("premier") && /\b(1|premier)\b/.test(normalize(subject.semestre))) ||
+        (normalize(filterSemester).includes("deuxieme") && /\b(2|deuxieme)\b/.test(normalize(subject.semestre)));
+
+      return (subjectMatchesText || courseMatchesText) &&
+        matchesUniversity && matchesFiliere && matchesLevel && matchesSemester &&
+        relatedCourses.length > 0;
+    });
+  }, [subjects, courses, search, filterUniversity, filterFiliere, filterLevel, filterSemester]);
 
   const filteredExams = useMemo(() => {
     return exams.filter(exam => {
@@ -1749,6 +1828,16 @@ const response = await fetch("/api/ia", {
         </select>
 
         <select
+          value={filterFiliere}
+          onChange={e => setFilterFiliere(e.target.value)}
+        >
+          <option value="">Toutes les filières</option>
+          {filieres.map(value => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select>
+
+        <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value)}
         >
@@ -1765,7 +1854,7 @@ const response = await fetch("/api/ia", {
           onChange={e => setFilterSemester(e.target.value)}
         >
           <option value="">Tous les semestres</option>
-          {semesters.map(value => (
+          {courseSemesters.map(value => (
             <option key={value} value={value}>
               {value}
             </option>
@@ -1779,7 +1868,61 @@ const response = await fetch("/api/ia", {
     {!selectedSubject && (
       <section className="content-section">
 
-        {!selectedYear ? (
+        {hasActiveCourseSearch ? (
+          <>
+            <div className="section-heading">
+              <div>
+                <h2>Résultats de recherche</h2>
+                <p>{searchMatchedSubjects.length} matière(s) trouvée(s) · {filteredCourses.length} cours correspondant(s)</p>
+              </div>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  setSearch("");
+                  setFilterUniversity("");
+                  setFilterFiliere("");
+                  setFilterLevel("");
+                  setFilterSemester("");
+                  setSelectedSubject(null);
+                  setSelectedYear(null);
+                  setSelectedSemester(null);
+                }}
+              >
+                Effacer la recherche
+              </button>
+            </div>
+
+            {searchMatchedSubjects.length === 0 ? (
+              <EmptyState
+                icon={Search}
+                title="Aucun cours trouvé"
+                description="Essaie un autre titre, une autre matière ou modifie les filtres."
+              />
+            ) : (
+              <div className="subjects-grid">
+                {searchMatchedSubjects.map(subject => {
+                  const count = filteredCourses.filter(course =>
+                    course.matiere_id === subject.id || course.matiereId === subject.id
+                  ).length;
+
+                  return (
+                    <button
+                      className="subject-card"
+                      key={subject.id}
+                      onClick={() => setSelectedSubject(subject)}
+                    >
+                      <IconTile icon={BookMarked} color="#2563EB" background="#EAF1FF" />
+                      <h3>{subject.nom}</h3>
+                      <p>{subject.universite} · {subject.niveau}</p>
+                      <span>{subject.semestre}</span>
+                      <small>{count} cours correspondant(s)</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : !selectedYear ? (
           <>
             <div className="section-heading">
               <div>
@@ -2011,16 +2154,9 @@ const response = await fetch("/api/ia", {
             </div>
           </div>
 
-          {courses.filter(course =>
-            (
-              course.matiere_id === selectedSubject.id ||
-              course.matiereId === selectedSubject.id
-            ) &&
-            (
-              !search ||
-              normalize(course.titre || course.title)
-                .includes(normalize(search))
-            )
+          {filteredCourses.filter(course =>
+            course.matiere_id === selectedSubject.id ||
+            course.matiereId === selectedSubject.id
           ).length === 0 ? (
             <EmptyState
               icon={FileText}
@@ -2029,17 +2165,10 @@ const response = await fetch("/api/ia", {
             />
           ) : (
             <div className="lesson-list">
-              {courses
+              {filteredCourses
                 .filter(course =>
-                  (
-                    course.matiere_id === selectedSubject.id ||
-                    course.matiereId === selectedSubject.id
-                  ) &&
-                  (
-                    !search ||
-                    normalize(course.titre || course.title)
-                      .includes(normalize(search))
-                  )
+                  course.matiere_id === selectedSubject.id ||
+                  course.matiereId === selectedSubject.id
                 )
                 .map(course => (
                   <div
