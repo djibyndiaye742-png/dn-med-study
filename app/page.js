@@ -1446,13 +1446,9 @@ const response = await fetch("/api/ia", {
     question: "Réponse à une question"
   };
 
-  const availableSubjects = subjects.filter(subject => {
-    return (
-      (!filterUniversity || subject.universite === filterUniversity) &&
-      (!filterLevel || subject.niveau === filterLevel) &&
-      (!filterSemester || subject.semestre === filterSemester)
-    );
-  });
+  // La navigation par année et semestre doit partir de toutes les matières.
+  // Les filtres de recherche sont déjà appliqués dans searchMatchedSubjects.
+  const availableSubjects = subjects;
 
   const visibleCourses = selectedSubject
   ? filteredCourses.filter(course =>
@@ -4347,34 +4343,18 @@ onChange={e => {
             `}</style>
 
       {pdfOuvert && (
-  /\.(pptx?)$/i.test(pdfOuvert.split(/[?#]/)[0]) ? (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "#fff",
-        overflowY: "auto"
-      }}
-    >
-      <div style={{ padding: 12, textAlign: "right" }}>
-        <button
-          type="button"
-          onClick={() => setPdfOuvert(null)}
-        >
-          Fermer
-        </button>
-      </div>
-
-      <PptxViewer url={pdfOuvert} />
-    </div>
-  ) : (
-    <PdfViewer
-      url={pdfOuvert}
-      onClose={() => setPdfOuvert(null)}
-    />
-  )
-)}
+        /\.(pptx?)$/i.test(pdfOuvert.split(/[?#]/)[0]) ? (
+          <PptxViewer
+            url={pdfOuvert}
+            onClose={() => setPdfOuvert(null)}
+          />
+        ) : (
+          <PdfViewer
+            url={pdfOuvert}
+            onClose={() => setPdfOuvert(null)}
+          />
+        )
+      )}
 
     </main>
   );
