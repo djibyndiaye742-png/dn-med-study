@@ -1,7 +1,7 @@
 "use client";
 
 import "./polyfills";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -27,14 +27,12 @@ class PdfErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="fixed inset-0 z-[99999] bg-black p-5 text-white">
-          <button onClick={this.props.onClose} className="text-2xl">
-            ←
+        <div className="fixed inset-0 z-[99999] bg-white p-5 text-slate-900">
+          <button onClick={this.props.onClose} className="mb-4 text-2xl">
+            ← Retour
           </button>
-          <h2 className="mt-5 font-bold text-red-400">
-            Erreur du lecteur PDF
-          </h2>
-          <pre className="mt-4 whitespace-pre-wrap text-sm">
+          <h2 className="font-bold text-red-600">Erreur du lecteur PDF</h2>
+          <pre className="mt-3 whitespace-pre-wrap text-sm">
             {String(this.state.error)}
           </pre>
         </div>
@@ -47,214 +45,49 @@ class PdfErrorBoundary extends React.Component {
 
 function PdfViewerContent({ url, onClose }) {
   const [numPages, setNumPages] = useState(0);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [pageDimensions, setPageDimensions] = useState(null);
-  const [containerSize, setContainerSize] = useState({
-    width: 0,
-    height: 0,
-  });
-  const [error, setError] = useState("");
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const viewerRef = useRef(null);
-  const containerRef = useRef(null);
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-
-  useEffect(() => {
-    const updateFullscreen = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
-
-    document.addEventListener("fullscreenchange", updateFullscreen);
-    return () =>
-      document.removeEventListener("fullscreenchange", updateFullscreen);
-  }, []);
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-
-    const updateSize = () => {
-      setContainerSize({
-        width: element.clientWidth,
-        height: element.clientHeight,
-      });
-    };
-
-    updateSize();
-
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(element);
-
-    window.addEventListener("resize", updateSize);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateSize);
-    };
-  }, []);
-
-  async function enterPresentation() {
-    try {
-      if (!document.fullscreenElement && viewerRef.current) {
-        await viewerRef.current.requestFullscreen();
-      }
-
-      try {
-        await screen.orientation?.lock?.("landscape");
-      } catch (orientationError) {
-        console.warn("Rotation non autorisée par le navigateur.", orientationError);
-      }
-    } catch (fullscreenError) {
-      console.warn("Plein écran indisponible.", fullscreenError);
-    }
-  }
-
-  async function exitPresentation() {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      }
-    } catch (fullscreenError) {
-      console.warn(fullscreenError);
-    }
-
-    try {
-      screen.orientation?.unlock?.();
-    } catch {}
-  }
-
-  async function handleDocumentLoad(pdf) {
-    setNumPages(pdf.numPages);
-    setPageNumber(1);
-    setError("");
-
-    try {
-      const firstPage = await pdf.getPage(1);
-      const viewport = firstPage.getViewport({ scale: 1 });
-
-      setPageDimensions({
-        width: viewport.width,
-        height: viewport.height,
-      });
-    } catch (err) {
-      console.error(err);
-      setError("Impossible de lire les dimensions du document.");
-    }
-  }
-
-  const pageWidth = (() => {
-    if (!pageDimensions || !containerSize.width || !containerSize.height) {
-      return 0;
-    }
-
-    const widthRatio = containerSize.width / pageDimensions.width;
-    const heightRatio = containerSize.height / pageDimensions.height;
-
-    return Math.floor(
-      Math.min(widthRatio, heightRatio) * pageDimensions.width
-    );
-  })();
-
-  const previousPage = useCallback(() => {
-    setPageNumber(current => Math.max(1, current - 1));
-  }, []);
-
-  const nextPage = useCallback(() => {
-    setPageNumber(current => Math.min(numPages, current + 1));
-  }, [numPages]);
-
-  function handleTouchStart(event) {
-    touchStartX.current = event.changedTouches[0].clientX;
-    touchStartY.current = event.changedTouches[0].clientY;
-  }
-
-  function handleTouchEnd(event) {
-    const deltaX = event.changedTouches[0].clientX - touchStartX.current;
-    const deltaY = event.changedTouches[0].clientY - touchStartY.current;
-
-    if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY)) {
-      if (deltaX < 0) nextPage();
-      else previousPage();
-    }
-  }
-
-  useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === "ArrowRight") nextPage();
-      if (event.key === "ArrowLeft") previousPage();
-      if (event.key === "Escape" && !document.fullscreenElement) {
-        onClose?.();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nextPage, previousPage, onClose]);
-
-  useEffect(() => {
-    return () => {
-      try {
-        screen.orientation?.unlock?.();
-      } catch {}
-    };
-  }, []);
 
   return (
-    <div
-      ref={viewerRef}
-      className="fixed inset-0 z-[99999] overflow-hidden bg-black text-white"
-      style={{ width: "100%", height: "100dvh" }}
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Retour"
-        className="absolute left-3 top-3 z-[100000] flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-2xl"
-      >
-        ←
-      </button>
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-100 text-slate-900">
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-white px-4 py-3 shadow-sm">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700"
+        >
+          ← Fermer
+        </button>
 
-      <button
-        type="button"
-        onClick={isFullscreen ? exitPresentation : enterPresentation}
-        aria-label="Mode présentation"
-        title="Mode présentation"
-        className="absolute right-3 top-3 z-[100000] flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-xl"
-      >
-        ⛶
-      </button>
+        <strong className="text-sm">DN MED STUDY</strong>
 
-      <main
-        ref={containerRef}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        className="flex h-full w-full items-center justify-center overflow-hidden"
-        style={{ touchAction: "pan-y" }}
-      >
-        {error ? (
-          <p className="p-5 text-center text-red-400">{error}</p>
-        ) : (
-          <Document
-            key={url}
-            file={url}
-            onLoadSuccess={handleDocumentLoad}
-            onLoadError={err => setError(String(err))}
-            loading={<p>Chargement du cours...</p>}
-          >
-            {pageWidth > 0 && (
+        <span className="text-xs text-slate-500">
+          {numPages > 0 ? `${numPages} pages` : "PDF"}
+        </span>
+      </header>
+
+      <div className="flex flex-col items-center gap-4 p-2 sm:p-4">
+        <Document
+          file={url}
+          suspense={false}
+          onLoadSuccess={({ numPages: total }) => setNumPages(total)}
+          onLoadError={(error) => console.error("Erreur PDF :", error)}
+          loading={<p className="p-6 text-sm">Chargement du cours...</p>}
+          error={<p className="p-6 text-sm text-red-600">Impossible d'ouvrir ce PDF.</p>}
+        >
+          {Array.from(new Array(numPages), (_, index) => (
+            <div
+              key={`page_${index + 1}`}
+              className="mb-4 bg-white shadow-md"
+            >
               <Page
-                pageNumber={pageNumber}
-                width={pageWidth}
+                pageNumber={index + 1}
+                width={Math.min(window.innerWidth - 20, 850)}
                 renderTextLayer={true}
                 renderAnnotationLayer={true}
-                loading={<p>Chargement de la page...</p>}
               />
-            )}
-          </Document>
-        )}
-      </main>
+            </div>
+          ))}
+        </Document>
+      </div>
     </div>
   );
 }
