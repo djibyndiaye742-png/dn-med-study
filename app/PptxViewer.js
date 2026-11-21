@@ -1,9 +1,25 @@
 "use client";
 
+import { useEffect } from "react";
 import { ReactPptxViewer } from "@extend-ai/react-pptx";
 import "@extend-ai/react-pptx/styles.css";
 
 export default function PptxViewer({ url, onClose }) {
+
+  // Bloquer le défilement de la page des cours
+  useEffect(() => {
+    const oldOverflow = document.body.style.overflow;
+    const oldTouchAction = document.body.style.touchAction;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.body.style.overflow = oldOverflow;
+      document.body.style.touchAction = oldTouchAction;
+    };
+  }, []);
+
   const handleBack = () => {
     if (onClose) {
       onClose();
@@ -16,18 +32,18 @@ export default function PptxViewer({ url, onClose }) {
     <div
       style={{
         position: "fixed",
-        top: 0,
-        left: 0,
+        inset: 0,
         width: "100%",
         height: "100vh",
         height: "100dvh",
-        zIndex: 99999,
+        zIndex: 999999,
         background: "#111827",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
       }}
     >
+      {/* Barre supérieure */}
       <header
         style={{
           height: "56px",
@@ -35,8 +51,8 @@ export default function PptxViewer({ url, onClose }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 16px",
-          background: "#10243A",
+          padding: "0 15px",
+          background: "#020817",
           color: "white",
         }}
       >
@@ -48,7 +64,7 @@ export default function PptxViewer({ url, onClose }) {
             color: "white",
             border: "none",
             borderRadius: "8px",
-            padding: "9px 16px",
+            padding: "10px 16px",
             fontWeight: "bold",
           }}
         >
@@ -60,32 +76,39 @@ export default function PptxViewer({ url, onClose }) {
         <div style={{ width: "75px" }} />
       </header>
 
+      {/* Lecteur PowerPoint */}
       <div
         className="dn-pptx-stage"
         style={{
           flex: 1,
-          width: "100%",
-          height: "calc(100dvh - 56px)",
           minHeight: 0,
-          overflow: "hidden",
+          width: "100%",
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          touchAction: "pan-y",
+          background: "#1f1f1f",
         }}
       >
         <ReactPptxViewer
           source={url}
-          mode="slide"
-          defaultZoom="fit-page"
+          mode="continuous"
+          defaultZoom="fit-width"
           showThumbnails={false}
           showToolbar
         />
       </div>
 
       <style jsx global>{`
-        .dn-pptx-stage > div {
-          height: 100% !important;
-          min-height: 0 !important;
-          width: 100% !important;
+        .dn-pptx-stage {
+          scrollbar-width: thin;
+        }
+
+        .dn-pptx-stage * {
+          overscroll-behavior: contain;
         }
       `}</style>
     </div>
   );
-}
+          }
