@@ -13,7 +13,6 @@ export default function PptxViewer({ url, onClose }) {
     setMounted(true);
 
     const oldOverflow = document.body.style.overflow;
-
     document.body.style.overflow = "hidden";
 
     return () => {
@@ -37,7 +36,6 @@ export default function PptxViewer({ url, onClose }) {
         position: "fixed",
         inset: 0,
         width: "100%",
-        height: "100%",
         height: "100dvh",
         zIndex: 2147483647,
         background: "#111827",
@@ -96,7 +94,7 @@ export default function PptxViewer({ url, onClose }) {
           <ReactPptxViewer
             source={url}
             mode="continuous"
-            defaultZoom="fit-width"
+            defaultZoom="automatic"
             showThumbnails={false}
             showToolbar={false}
             virtualization={{
