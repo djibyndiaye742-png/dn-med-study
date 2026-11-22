@@ -86,7 +86,7 @@ export default function PptxViewer({ url, onClose }) {
           overflowX: "hidden",
           WebkitOverflowScrolling: "touch",
           overscrollBehavior: "contain",
-          touchAction: "pan-y",
+          touchAction: "pan-y pinch-zoom",
           background: "#111827",
         }}
       >
