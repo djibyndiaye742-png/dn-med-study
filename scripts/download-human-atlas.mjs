@@ -1,64 +1,66 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const REPO = "https://api.github.com/repos/ashemag/human-atlas/git/trees/main?recursive=1";
-const RAW = "https://raw.githubusercontent.com/ashemag/human-atlas/main/";
-const DEST = path.resolve("public/models/human-atlas");
+const BASE =
+  "https://raw.githubusercontent.com/ashemag/human-atlas/main/public";
+
+const DEST = path.resolve("public/models");
+
+async function get(url) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Téléchargement impossible : ${url}`);
+  }
+
+  return response;
+}
 
 async function main() {
   await fs.mkdir(DEST, { recursive: true });
 
-  console.log("Recherche des fichiers Human Atlas...");
+  console.log("Téléchargement du manifeste...");
 
-  const response = await fetch(REPO);
-  if (!response.ok) {
-    throw new Error(`Erreur GitHub API : ${response.status}`);
+  const response = await get(`${BASE}/models/atlas.json`);
+  const atlas = await response.json();
+
+  if (
+    atlas.parts?.length !== 2234 ||
+    atlas.concepts?.length !== 3432 ||
+    !Array.isArray(atlas.chunks)
+  ) {
+    throw new Error("Manifeste anatomique invalide.");
   }
 
-  const tree = await response.json();
-
-  if (!Array.isArray(tree.tree)) {
-    throw new Error("Impossible de lire l'arborescence Human Atlas.");
-  }
-
-  const files = tree.tree.filter(item =>
-    item.type === "blob" &&
-    (
-      item.path.endsWith(".json") ||
-      item.path.endsWith(".bin") ||
-      item.path.endsWith(".glb") ||
-      item.path.endsWith(".gltf")
-    )
+  await fs.writeFile(
+    path.join(DEST, "atlas.json"),
+    JSON.stringify(atlas)
   );
 
-  if (!files.length) {
-    throw new Error("Aucun fichier anatomique trouvé.");
-  }
+  console.log("2 234 structures anatomiques détectées.");
 
-  console.log(`${files.length} fichiers trouvés.`);
+  for (let i = 0; i < atlas.chunks.length; i++) {
+    const chunk = atlas.chunks[i];
+    const filename = path.basename(chunk.url);
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const filename = path.basename(file.path);
+    console.log(
+      `Téléchargement ${i + 1}/${atlas.chunks.length} : ${filename}`
+    );
 
-    console.log(`[${i + 1}/${files.length}] ${filename}`);
+    const file = await get(`${BASE}${chunk.url}`);
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-    const result = await fetch(RAW + file.path);
-
-    if (!result.ok) {
-      throw new Error(`Échec du téléchargement : ${file.path}`);
+    if (buffer.length !== chunk.bytes) {
+      throw new Error(`Taille incorrecte : ${filename}`);
     }
 
-    const buffer = Buffer.from(await result.arrayBuffer());
-
-    if (file.size && buffer.length !== file.size) {
-      throw new Error(`Fichier incomplet : ${filename}`);
-    }
-
-    await fs.writeFile(path.join(DEST, filename), buffer);
+    await fs.writeFile(
+      path.join(DEST, filename),
+      buffer
+    );
   }
 
-  console.log("Téléchargement terminé !");
+  console.log("Tous les modèles anatomiques sont téléchargés.");
 }
 
 main().catch(error => {
