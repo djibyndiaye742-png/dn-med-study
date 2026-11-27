@@ -137,10 +137,8 @@ async function loadAtlas() {
 
   const chunkBuffers = [];
 
-  // Téléchargement des blocs anatomiques
   for (let i = 0; i < atlas.chunks.length; i++) {
     const chunk = atlas.chunks[i];
-
     const filename = chunk.url.split("/").pop();
 
     const fileResponse = await fetch(
@@ -164,7 +162,6 @@ async function loadAtlas() {
     chunkBuffers.push(buffer);
   }
 
-  // Création des 2 234 structures
   for (const part of atlas.parts) {
     const buffer = chunkBuffers[part.chunk];
 
@@ -230,13 +227,11 @@ async function loadAtlas() {
       baseMaterial: material,
     };
 
-    // Toutes les structures sont cachées au départ.
     mesh.visible = false;
 
     root.add(mesh);
   }
 
-  // Centrage et mise à l'échelle du corps entier
   const bounds = new THREE.Box3().setFromObject(root);
 
   const center = new THREE.Vector3();
@@ -257,7 +252,6 @@ async function loadAtlas() {
     maxDimension > 0 ? 2.7 / maxDimension : 1;
 
   root.scale.setScalar(scale);
-
   root.updateMatrixWorld(true);
 
   return {
@@ -268,7 +262,7 @@ async function loadAtlas() {
 }
 
 /* =========================================================
-   SCÈNE 3D — SÉLECTION ANATOMIQUE CORRIGÉE
+   SCÈNE 3D — SÉLECTION ANATOMIQUE
 ========================================================= */
 
 function AnatomicalScene({
@@ -286,7 +280,6 @@ function AnatomicalScene({
     []
   );
 
-  // Visibilité des systèmes
   useEffect(() => {
     if (!model) return;
 
@@ -317,7 +310,6 @@ function AnatomicalScene({
     isolate,
   ]);
 
-  // Mise en évidence de la structure sélectionnée
   useEffect(() => {
     if (!model) return;
 
@@ -329,7 +321,6 @@ function AnatomicalScene({
 
       if (!baseMaterial) return;
 
-      // Restaurer le matériau original
       if (object.material !== baseMaterial) {
         object.material.dispose();
         object.material = baseMaterial;
@@ -339,7 +330,6 @@ function AnatomicalScene({
         object.userData.conceptId ??
         object.userData.id;
 
-      // Mettre en évidence la structure sélectionnée
       if (
         selectedConcept != null &&
         objectKey === selectedConcept
@@ -360,9 +350,7 @@ function AnatomicalScene({
     });
   }, [model, selectedConcept]);
 
-  /* -------------------------------------------------------
-     DÉTECTION DIRECTE DES STRUCTURES PAR RAYCASTING
-  ------------------------------------------------------- */
+  /* DÉTECTION DES STRUCTURES PAR RAYCASTING */
 
   useEffect(() => {
     if (!model) return;
@@ -399,7 +387,6 @@ function AnatomicalScene({
 
       startPointer = null;
 
-      // Ne pas sélectionner pendant une rotation.
       if (distance > 8) return;
 
       const rect = canvas.getBoundingClientRect();
@@ -428,8 +415,6 @@ function AnatomicalScene({
           true
         );
 
-      // Vérifier la visibilité de la structure
-      // ainsi que celle de ses parents.
       const isVisible = (object) => {
         let current = object;
 
@@ -444,8 +429,6 @@ function AnatomicalScene({
         return true;
       };
 
-      // Prendre la première structure réellement
-      // sélectionnable parmi les intersections.
       const hit = intersections.find(
         ({ object }) => {
           return (
@@ -558,7 +541,7 @@ export default function Anatomie3D() {
 
   const controlsRef = useRef(null);
 
-  /* Chargement du modèle */
+  /* CHARGEMENT DU MODÈLE */
 
   useEffect(() => {
     let cancelled = false;
@@ -604,7 +587,7 @@ export default function Anatomie3D() {
     };
   }, []);
 
-  /* Sélection d'une structure */
+  /* SÉLECTION D'UNE STRUCTURE */
 
   const handleSelect = useCallback((part) => {
     setSelected({
@@ -615,7 +598,7 @@ export default function Anatomie3D() {
     setIsolate(false);
   }, []);
 
-  /* Afficher / masquer un système */
+  /* AFFICHER / MASQUER UN SYSTÈME */
 
   const toggleSystem = useCallback((systemId) => {
     setVisibleSystems((previous) => {
@@ -629,14 +612,14 @@ export default function Anatomie3D() {
     });
   }, []);
 
-  /* Tout afficher */
+  /* TOUT AFFICHER */
 
   const showAllSystems = () => {
     setVisibleSystems(Object.keys(SYSTEMS));
     setIsolate(false);
   };
 
-  /* Tout masquer */
+  /* TOUT MASQUER */
 
   const hideAllSystems = () => {
     setVisibleSystems([]);
@@ -644,7 +627,7 @@ export default function Anatomie3D() {
     setIsolate(false);
   };
 
-  /* Isolation de la structure sélectionnée */
+  /* ISOLATION DE LA STRUCTURE */
 
   const isolateStructure = () => {
     if (!selected) return;
@@ -660,7 +643,7 @@ export default function Anatomie3D() {
     setIsolate(true);
   };
 
-  /* Zoom */
+  /* ZOOM */
 
   const zoomIn = () => {
     const controls = controlsRef.current;
@@ -708,7 +691,7 @@ export default function Anatomie3D() {
     controls.update();
   };
 
-  /* Libellé du système sélectionné */
+  /* LIBELLÉ DU SYSTÈME */
 
   const selectedSystem = selected
     ? SYSTEMS[selected.system]?.name ||
@@ -918,6 +901,145 @@ export default function Anatomie3D() {
             </Canvas>
           )}
 
+          {/* FENÊTRE FLOTTANTE DE LA STRUCTURE SÉLECTIONNÉE */}
+
+          {selected && showInfo && (
+            <div
+              style={{
+                position: "absolute",
+                top: "12px",
+                left: "12px",
+                zIndex: 5,
+                width: "min(280px, calc(100% - 76px))",
+                maxHeight: "calc(100% - 90px)",
+                overflowY: "auto",
+                background: "rgba(255, 255, 255, 0.97)",
+                backdropFilter: "blur(10px)",
+                border: "1px solid #D7E5F4",
+                borderRadius: "12px",
+                padding: "13px",
+                boxShadow: "0 5px 22px rgba(0,0,0,0.28)",
+                color: "#172337",
+                pointerEvents: "auto",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "8px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    color: "#64748B",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.4px",
+                  }}
+                >
+                  Structure sélectionnée
+                </span>
+
+                <button
+                  onClick={() => {
+                    setSelected(null);
+                    setIsolate(false);
+                  }}
+                  title="Fermer"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "28px",
+                    height: "28px",
+                    flexShrink: 0,
+                    border: 0,
+                    background: "#F1F5F9",
+                    color: "#334155",
+                    borderRadius: "7px",
+                    cursor: "pointer",
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <h3
+                style={{
+                  fontSize: "17px",
+                  lineHeight: 1.35,
+                  color: "#1D4ED8",
+                  margin: "10px 0 8px",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {selected.name}
+              </h3>
+
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "5px 8px",
+                  borderRadius: "6px",
+                  background: "#EFF6FF",
+                  color: "#1E40AF",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  marginBottom: "7px",
+                }}
+              >
+                {selectedSystem}
+              </div>
+
+              <p
+                style={{
+                  fontSize: "10px",
+                  color: "#94A3B8",
+                  margin: "3px 0 10px",
+                  wordBreak: "break-all",
+                }}
+              >
+                Identifiant : {selected.id}
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "7px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  onClick={isolateStructure}
+                  style={{
+                    padding: "8px 10px",
+                    background: "#2563EB",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "7px",
+                    fontSize: "10px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                  }}
+                >
+                  Isoler
+                </button>
+
+                {isolate && (
+                  <button
+                    onClick={() => setIsolate(false)}
+                    style={smallButton}
+                  >
+                    Voir le système
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* COMMANDES DE ZOOM */}
 
           <div
@@ -980,7 +1102,7 @@ export default function Anatomie3D() {
             )}
         </div>
 
-        {/* PANNEAUX */}
+        {/* PANNEAUX INFÉRIEURS */}
 
         <div
           style={{
@@ -990,7 +1112,7 @@ export default function Anatomie3D() {
             padding: "14px",
           }}
         >
-          {/* SYSTÈMES */}
+          {/* SYSTÈMES ANATOMIQUES */}
 
           <section
             style={{
@@ -1019,7 +1141,6 @@ export default function Anatomie3D() {
                 }}
               >
                 <Layers size={17} />
-
                 Systèmes anatomiques
               </h3>
 
@@ -1123,110 +1244,6 @@ export default function Anatomie3D() {
             </div>
           </section>
 
-          {/* STRUCTURE SÉLECTIONNÉE */}
-
-          {selected && showInfo && (
-            <section
-              style={{
-                background: "white",
-                padding: "15px",
-                borderRadius: "12px",
-                border: "1px solid #D7E5F4",
-                boxShadow:
-                  "0 3px 12px rgba(20,40,70,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <h3
-                  style={{
-                    fontSize: "15px",
-                    margin: 0,
-                  }}
-                >
-                  Structure sélectionnée
-                </h3>
-
-                <button
-                  onClick={() => {
-                    setSelected(null);
-                    setIsolate(false);
-                  }}
-                  style={{
-                    border: 0,
-                    background: "#F1F5F9",
-                    borderRadius: "7px",
-                    padding: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <h2
-                style={{
-                  fontSize: "19px",
-                  color: "#1D4ED8",
-                  margin: "13px 0 7px",
-                }}
-              >
-                {selected.name}
-              </h2>
-
-              <p
-                style={{
-                  fontSize: "12px",
-                  color: "#64748B",
-                  margin: "5px 0",
-                }}
-              >
-                Système : {selectedSystem}
-              </p>
-
-              <p
-                style={{
-                  fontSize: "11px",
-                  color: "#94A3B8",
-                  margin: "5px 0",
-                  wordBreak: "break-all",
-                }}
-              >
-                Identifiant : {selected.id}
-              </p>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  marginTop: "14px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  onClick={isolateStructure}
-                  style={primaryButton}
-                >
-                  Isoler cette structure
-                </button>
-
-                {isolate && (
-                  <button
-                    onClick={() => setIsolate(false)}
-                    style={smallButton}
-                  >
-                    Voir le système
-                  </button>
-                )}
-              </div>
-            </section>
-          )}
-
           {/* AIDE */}
 
           {showInfo && (
@@ -1258,9 +1275,9 @@ export default function Anatomie3D() {
                 Active un ou plusieurs systèmes
                 anatomiques. Touche ensuite une structure
                 du modèle pour afficher son nom et ses
-                informations disponibles. Fais glisser
-                ton doigt pour tourner le corps et utilise
-                deux doigts pour zoomer.
+                informations. Fais glisser ton doigt
+                pour tourner le corps et utilise deux
+                doigts pour zoomer.
               </p>
             </section>
           )}
