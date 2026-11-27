@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Suspense,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Html, useGLTF } from "@react-three/drei";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
@@ -16,6 +9,7 @@ import {
   modelUrl,
   ANATOMY_BY_KEY,
   structuresFor,
+  ATTRIBUTION,
 } from "open-anatomy-3d";
 
 import {
@@ -43,7 +37,7 @@ const SYSTEMS = [
   { id: "nerves", label: "Nerfs", color: "#E8C84A" },
 ];
 
-const ALL_SYSTEMS = SYSTEMS.map((item) => item.id);
+const SYSTEM_IDS = SYSTEMS.map((s) => s.id);
 
 const normalize = (value = "") =>
   String(value)
@@ -53,96 +47,44 @@ const normalize = (value = "") =>
     .trim();
 
 /* =========================
-   IDENTIFICATION DES SYSTÈMES
+   INFORMATIONS DES STRUCTURES
 ========================= */
 
-function getSystemId(info) {
-  const value = normalize(
-    `${info?.system || ""} ${info?.category || ""}`
+function getStructureInfo(object) {
+  if (!object) return null;
+
+  return (
+    ANATOMY_BY_KEY[object.name] ||
+    null
   );
-
-  if (
-    value.includes("skeleton") ||
-    value.includes("skeletal") ||
-    value.includes("bone") ||
-    value.includes("os")
-  ) {
-    return "skeleton";
-  }
-
-  if (
-    value.includes("muscle") ||
-    value.includes("muscular")
-  ) {
-    return "muscles";
-  }
-
-  if (
-    value.includes("nerve") ||
-    value.includes("nervous")
-  ) {
-    return "nerves";
-  }
-
-  if (
-    value.includes("vessel") ||
-    value.includes("vascular") ||
-    value.includes("arter") ||
-    value.includes("vein") ||
-    value.includes("blood")
-  ) {
-    return "vessels";
-  }
-
-  if (
-    value.includes("skin") ||
-    value.includes("integument")
-  ) {
-    return "skin";
-  }
-
-  if (
-    value.includes("organ") ||
-    value.includes("digest") ||
-    value.includes("respiratory") ||
-    value.includes("urinary") ||
-    value.includes("cardiac")
-  ) {
-    return "organs";
-  }
-
-  return info?.system || "organs";
 }
 
-/* =========================
-   COULEURS ANATOMIQUES
-========================= */
+function getStructureColor(info) {
+  if (!info) return "#B8C2CC";
 
-function getColor(info) {
-  const system = getSystemId(info);
+  const system = info.system;
 
-  if (system === "muscles") return "#A83232";
-  if (system === "skeleton") return "#E9DCC1";
-  if (system === "nerves") return "#E8C84A";
   if (system === "skin") return "#D9A17C";
+  if (system === "skeleton") return "#E9DCC1";
+  if (system === "muscles") return "#A83232";
+  if (system === "organs") return "#D87955";
+  if (system === "nerves") return "#E8C84A";
 
   if (system === "vessels") {
-    const key = normalize(
-      `${info?.key || ""} ${info?.label || ""}`
-    );
+    const name = normalize(info.key + " " + info.label);
 
-    if (key.includes("vein") || key.includes("veine")) {
+    if (name.includes("vein") || name.includes("veine")) {
       return "#2868C7";
     }
 
     return "#D52F3D";
   }
 
-  return info?.color || "#D87955";
+  return info.color || "#B8C2CC";
 }
 
 /* =========================
-   RECHARGEMENT DU MODÈLE 3D
+   MODÈLE ANATOMIQUE
 ========================= */
 
 function AnatomyModel({
@@ -169,38 +111,44 @@ function AnatomyModel({
     copy.traverse((object) => {
       if (!object.isMesh) return;
 
-      const info =
-        ANATOMY_BY_KEY[object.name] ||
-        Object.values(ANATOMY_BY_KEY).find(
-          (item) => item.key === object.name
-        );
+      const info = getStructureInfo(object);
 
-      if (!info) return;
+      // Les éléments inconnus ne doivent jamais apparaître.
+      if (!info || !SYSTEM_IDS.includes(info.system)) {
+        object.visible = false;
+        object.userData.anatomyInfo = null;
+        return;
+      }
 
-      object.userData.anatomyKey = info.key;
       object.userData.anatomyInfo = info;
+      object.userData.anatomyKey = info.key;
 
-      const originalMaterials = Array.isArray(object.material)
+      // Chaque structure possède son propre matériau.
+      const originals = Array.isArray(object.material)
         ? object.material
         : [object.material];
 
-      const newMaterials = originalMaterials.map((original) => {
+      const materials = originals.map((original) => {
         const material = original.clone();
 
-        material.color.set(getColor(info));
-        material.roughness = 0.75;
-        material.metalness = 0.02;
+        material.color.set(getStructureColor(info));
+        material.roughness = 0.8;
+        material.metalness = 0;
 
         return material;
       });
 
       object.material = Array.isArray(object.material)
-        ? newMaterials
-        : newMaterials[0];
+        ? materials
+        : materials[0];
     });
 
     return copy;
   }, [scene]);
+
+  /* =========================
+     VISIBILITÉ ET SÉLECTION
+  ========================= */
 
   useEffect(() => {
     model.traverse((object) => {
@@ -208,18 +156,20 @@ function AnatomyModel({
 
       const info = object.userData.anatomyInfo;
 
-      if (!info) return;
+      // Aucune structure inconnue n'est affichée.
+      if (!info || !SYSTEM_IDS.includes(info.system)) {
+        object.visible = false;
+        return;
+      }
 
-      const system = getSystemId(info);
+      const systemIsVisible =
+        visibleSystems.includes(info.system);
 
-      const systemVisible =
-        visibleSystems.includes(system) ||
-        !ALL_SYSTEMS.includes(system);
-
-      const isolatedVisible =
+      const structureIsVisible =
         !isolated || info.key === isolated;
 
-      object.visible = systemVisible && isolatedVisible;
+      object.visible =
+        systemIsVisible && structureIsVisible;
 
       const materials = Array.isArray(object.material)
         ? object.material
@@ -228,17 +178,19 @@ function AnatomyModel({
       materials.forEach((material) => {
         if (!material) return;
 
+        // Mode radiographie.
         material.transparent = xray;
         material.opacity = xray ? opacity : 1;
         material.depthWrite = !xray;
 
+        // Mise en évidence de la structure sélectionnée.
         if (material.emissive) {
           material.emissive.set(
             selected === info.key ? "#287BFF" : "#000000"
           );
 
           material.emissiveIntensity =
-            selected === info.key ? 0.55 : 0;
+            selected === info.key ? 0.6 : 0;
         }
 
         material.needsUpdate = true;
@@ -253,22 +205,19 @@ function AnatomyModel({
     opacity,
   ]);
 
+  /* =========================
+     SÉLECTION INDIVIDUELLE
+  ========================= */
+
   function handleClick(event) {
     event.stopPropagation();
 
     const object = event.object;
+    const info = object?.userData?.anatomyInfo;
 
-    const key =
-      object?.userData?.anatomyKey ||
-      object?.name;
+    if (!info || !object.visible) return;
 
-    const info =
-      object?.userData?.anatomyInfo ||
-      ANATOMY_BY_KEY[key];
-
-    if (info?.key) {
-      onSelect(info.key);
-    }
+    onSelect(info.key);
   }
 
   return (
@@ -288,65 +237,71 @@ function LoadingModel() {
     <Html center>
       <div
         style={{
-          color: "#FFFFFF",
-          fontSize: 14,
+          color: "white",
           background: "#172536",
-          padding: "13px 18px",
+          padding: "14px 18px",
           borderRadius: 12,
+          fontSize: 13,
           whiteSpace: "nowrap",
         }}
       >
-        Chargement de l'anatomie 3D...
+        Chargement de l'anatomie...
       </div>
     </Html>
   );
 }
 
 /* =========================
-   COMPOSANT PRINCIPAL
+   APPLICATION PRINCIPALE
 ========================= */
 
 export default function Anatomie3D() {
   const controlsRef = useRef(null);
 
   const [sex, setSex] = useState("male");
+
   const [selected, setSelected] = useState("");
-  const [search, setSearch] = useState("");
-
-  const [visibleSystems, setVisibleSystems] =
-    useState(ALL_SYSTEMS);
-
   const [isolated, setIsolated] = useState("");
 
+  const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [showLayers, setShowLayers] = useState(false);
+
+  const [showLayers, setShowLayers] = useState(true);
   const [showInfo, setShowInfo] = useState(true);
+
+  // La peau est masquée au départ pour voir les structures internes.
+  const [visibleSystems, setVisibleSystems] = useState([
+    "skeleton",
+    "muscles",
+    "organs",
+    "vessels",
+    "nerves",
+  ]);
 
   const [xray, setXray] = useState(false);
   const [opacity, setOpacity] = useState(0.3);
 
   /* =========================
-     DONNÉES ANATOMIQUES
+     CATALOGUE
   ========================= */
 
-  const structures = useMemo(() => {
-    return structuresFor(sex) || [];
-  }, [sex]);
+  const structures = useMemo(
+    () => structuresFor(sex) || [],
+    [sex]
+  );
 
   const structureMap = useMemo(() => {
-    const map = {};
+    const result = {};
 
     structures.forEach((item) => {
-      map[item.key] = item;
+      result[item.key] = item;
     });
 
-    return map;
+    return result;
   }, [structures]);
 
   const selectedInfo = selected
-    ? structureMap[selected] ||
-      ANATOMY_BY_KEY[selected] ||
-      null
+    ? structureMap[selected] || ANATOMY_BY_KEY[selected]
     : null;
 
   /* =========================
@@ -360,11 +315,11 @@ export default function Anatomie3D() {
 
     return structures
       .filter((item) => {
-        const text = normalize(
+        const content = normalize(
           `${item.label} ${item.key} ${item.system} ${item.category}`
         );
 
-        return text.includes(query);
+        return content.includes(query);
       })
       .slice(0, 40);
   }, [structures, search]);
@@ -374,6 +329,18 @@ export default function Anatomie3D() {
   ========================= */
 
   function selectStructure(key) {
+    const info = structureMap[key] || ANATOMY_BY_KEY[key];
+
+    if (!info) return;
+
+    // Si le système est masqué, on le réactive.
+    if (!visibleSystems.includes(info.system)) {
+      setVisibleSystems((current) => [
+        ...current,
+        info.system,
+      ]);
+    }
+
     setSelected(key);
     setIsolated("");
     setShowInfo(true);
@@ -387,31 +354,51 @@ export default function Anatomie3D() {
   }
 
   /* =========================
-     SYSTÈMES
+     VISIBILITÉ DES SYSTÈMES
   ========================= */
 
   function toggleSystem(id) {
-    setVisibleSystems((current) => {
-      if (current.includes(id)) {
-        return current.filter((item) => item !== id);
-      }
+    setVisibleSystems((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
+    );
 
-      return [...current, id];
-    });
+    setSelected("");
+    setIsolated("");
+  }
 
+  function showAllSystems() {
+    setVisibleSystems(SYSTEM_IDS);
+    setIsolated("");
+  }
+
+  function hideAllSystems() {
+    setVisibleSystems([]);
+    setSelected("");
     setIsolated("");
   }
 
   /* =========================
-     ISOLATION
+     ISOLATION INDIVIDUELLE
   ========================= */
 
-  function isolateStructure() {
+  function toggleIsolation() {
     if (!selectedInfo) return;
 
     setIsolated((current) =>
       current === selected ? "" : selected
     );
+  }
+
+  /* =========================
+     CHANGEMENT DU CORPS
+  ========================= */
+
+  function changeSex(value) {
+    setSex(value);
+    setSelected("");
+    setIsolated("");
   }
 
   /* =========================
@@ -423,22 +410,18 @@ export default function Anatomie3D() {
     setIsolated("");
     setSearch("");
 
-    setVisibleSystems(ALL_SYSTEMS);
+    setVisibleSystems([
+      "skeleton",
+      "muscles",
+      "organs",
+      "vessels",
+      "nerves",
+    ]);
 
     setXray(false);
     setOpacity(0.3);
 
-    if (controlsRef.current) {
-      controlsRef.current.reset();
-    }
-  }
-
-  function changeSex(value) {
-    setSex(value);
-    setSelected("");
-    setIsolated("");
-    setVisibleSystems(ALL_SYSTEMS);
-    setXray(false);
+    controlsRef.current?.reset();
   }
 
   /* =========================
@@ -476,7 +459,7 @@ export default function Anatomie3D() {
   };
 
   /* =========================
-     INTERFACE
+     AFFICHAGE
   ========================= */
 
   return (
@@ -504,7 +487,7 @@ export default function Anatomie3D() {
               marginTop: 4,
             }}
           >
-            Atlas anatomique interactif
+            Exploration anatomique interactive
           </div>
         </div>
 
@@ -535,10 +518,8 @@ export default function Anatomie3D() {
 
             <input
               value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="Ex : cœur, foie, biceps..."
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un muscle, un os, un organe..."
               autoFocus
               style={{
                 flex: 1,
@@ -574,7 +555,7 @@ export default function Anatomie3D() {
                 marginTop: 7,
                 background: "#172536",
                 borderRadius: 12,
-                maxHeight: 220,
+                maxHeight: 230,
                 overflowY: "auto",
               }}
             >
@@ -591,9 +572,7 @@ export default function Anatomie3D() {
                 filteredStructures.map((item) => (
                   <button
                     key={item.key}
-                    onClick={() =>
-                      selectStructure(item.key)
-                    }
+                    onClick={() => selectStructure(item.key)}
                     style={{
                       width: "100%",
                       padding: 12,
@@ -637,18 +616,14 @@ export default function Anatomie3D() {
         }}
       >
         <button
-          style={
-            sex === "male" ? activeButton : buttonStyle
-          }
+          style={sex === "male" ? activeButton : buttonStyle}
           onClick={() => changeSex("male")}
         >
           Homme
         </button>
 
         <button
-          style={
-            sex === "female" ? activeButton : buttonStyle
-          }
+          style={sex === "female" ? activeButton : buttonStyle}
           onClick={() => changeSex("female")}
         >
           Femme
@@ -683,57 +658,75 @@ export default function Anatomie3D() {
       {/* PANNEAU DES SYSTÈMES */}
 
       {showLayers && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            padding: "0 14px 12px",
-          }}
-        >
-          {SYSTEMS.map((system) => {
-            const active = visibleSystems.includes(
-              system.id
-            );
+        <div style={{ padding: "0 14px 12px" }}>
 
-            return (
-              <button
-                key={system.id}
-                onClick={() => toggleSystem(system.id)}
-                style={{
-                  ...buttonStyle,
-                  background: active
-                    ? "#24364A"
-                    : "#111C29",
-                  borderColor: active
-                    ? system.color
-                    : "#334155",
-                  opacity: active ? 1 : 0.55,
-                }}
-              >
-                <span
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 9,
+            }}
+          >
+            <button
+              style={buttonStyle}
+              onClick={showAllSystems}
+            >
+              Tout afficher
+            </button>
+
+            <button
+              style={buttonStyle}
+              onClick={hideAllSystems}
+            >
+              Tout masquer
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            {SYSTEMS.map((system) => {
+              const active = visibleSystems.includes(system.id);
+
+              return (
+                <button
+                  key={system.id}
+                  onClick={() => toggleSystem(system.id)}
                   style={{
-                    width: 9,
-                    height: 9,
-                    borderRadius: "50%",
-                    background: system.color,
+                    ...buttonStyle,
+                    background: active ? "#24364A" : "#111C29",
+                    borderColor: active ? system.color : "#334155",
+                    opacity: active ? 1 : 0.55,
                   }}
-                />
+                >
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: "50%",
+                      background: system.color,
+                    }}
+                  />
 
-                {system.label}
+                  {system.label}
 
-                {active ? (
-                  <Eye size={14} />
-                ) : (
-                  <EyeOff size={14} />
-                )}
-              </button>
-            );
-          })}
+                  {active ? (
+                    <Eye size={14} />
+                  ) : (
+                    <EyeOff size={14} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* RÉGLAGE RAYONS X */}
+      {/* TRANSPARENCE */}
 
       {xray && (
         <div
@@ -760,15 +753,13 @@ export default function Anatomie3D() {
             max="0.8"
             step="0.05"
             value={opacity}
-            onChange={(event) =>
-              setOpacity(Number(event.target.value))
-            }
+            onChange={(e) => setOpacity(Number(e.target.value))}
             style={{ width: "100%" }}
           />
         </div>
       )}
 
-      {/* MODÈLE 3D */}
+      {/* SCÈNE 3D */}
 
       <div
         style={{
@@ -826,7 +817,7 @@ export default function Anatomie3D() {
           />
         </Canvas>
 
-        {/* BOUTON INFORMATIONS */}
+        {/* INFORMATIONS */}
 
         <div
           style={{
@@ -843,7 +834,6 @@ export default function Anatomie3D() {
               height: 43,
               padding: 0,
             }}
-            title="Informations"
           >
             <Info size={19} />
           </button>
@@ -858,7 +848,7 @@ export default function Anatomie3D() {
               left: 12,
               right: 12,
               bottom: 12,
-              background: "rgba(15, 29, 44, 0.96)",
+              background: "rgba(15, 29, 44, 0.97)",
               border: "1px solid #3B5269",
               borderRadius: 17,
               padding: 15,
@@ -902,8 +892,7 @@ export default function Anatomie3D() {
                     marginTop: 5,
                   }}
                 >
-                  {selectedInfo.system} ·{" "}
-                  {selectedInfo.category}
+                  {selectedInfo.system} · {selectedInfo.category}
                 </div>
               </div>
 
@@ -922,15 +911,13 @@ export default function Anatomie3D() {
             </div>
 
             <button
-              onClick={isolateStructure}
+              onClick={toggleIsolation}
               style={{
                 ...buttonStyle,
                 width: "100%",
                 marginTop: 13,
                 background:
-                  isolated === selected
-                    ? "#2563EB"
-                    : "#263B52",
+                  isolated === selected ? "#2563EB" : "#263B52",
               }}
             >
               {isolated === selected
@@ -948,7 +935,7 @@ export default function Anatomie3D() {
           display: "flex",
           justifyContent: "center",
           gap: 16,
-          padding: "12px 8px 16px",
+          padding: "12px 8px 8px",
           color: "#94A3B8",
           fontSize: 11,
           flexWrap: "wrap",
@@ -958,6 +945,19 @@ export default function Anatomie3D() {
         <span>Deux doigts : zoomer</span>
         <span>Toucher : sélectionner</span>
       </div>
+
+      {/* CRÉDIT DU MODÈLE */}
+
+      <div
+        style={{
+          padding: "5px 12px 14px",
+          textAlign: "center",
+          color: "#64748B",
+          fontSize: 9,
+        }}
+      >
+        {ATTRIBUTION}
+      </div>
     </div>
   );
-          }
+}
