@@ -7,17 +7,102 @@ const CASES = {
   abdomen: {
     title: "Douleur abdominale",
     patient: "Mamadou, 24 ans",
-    initial: "J'ai mal au ventre depuis ce matin."
+    initial: "Bonjour docteur. J'ai mal au ventre depuis ce matin."
   },
   respiration: {
     title: "Difficulté respiratoire",
     patient: "Aminata, 32 ans",
-    initial: "J'ai du mal à respirer depuis hier soir."
+    initial: "Docteur, j'ai du mal à respirer depuis hier soir."
   },
   fievre: {
     title: "Fièvre et frissons",
     patient: "Ibrahima, 28 ans",
     initial: "J'ai de la fièvre et des frissons depuis deux jours."
+  },
+  thorax: {
+    title: "Douleur thoracique",
+    patient: "Ousmane, 55 ans",
+    initial: "J'ai une douleur dans la poitrine depuis ce matin."
+  },
+  palpitations: {
+    title: "Palpitations",
+    patient: "Fatou, 26 ans",
+    initial: "Mon cœur bat parfois très rapidement."
+  },
+  asthme: {
+    title: "Crise d'asthme",
+    patient: "Moussa, 19 ans",
+    initial: "Je siffle quand je respire et j'ai du mal à reprendre mon souffle."
+  },
+  toux: {
+    title: "Toux persistante",
+    patient: "Awa, 38 ans",
+    initial: "Je tousse beaucoup depuis plusieurs semaines."
+  },
+  diarrhee: {
+    title: "Diarrhée aiguë",
+    patient: "Cheikh, 21 ans",
+    initial: "J'ai la diarrhée depuis hier."
+  },
+  vomissements: {
+    title: "Vomissements",
+    patient: "Mariama, 30 ans",
+    initial: "Je vomis depuis cette nuit."
+  },
+  paludisme: {
+    title: "Suspicion de paludisme",
+    patient: "Abdou, 23 ans",
+    initial: "J'ai de la fièvre, des maux de tête et des courbatures."
+  },
+  cephalees: {
+    title: "Céphalées",
+    patient: "Khadija, 27 ans",
+    initial: "J'ai très mal à la tête depuis hier."
+  },
+  convulsions: {
+    title: "Convulsions",
+    patient: "Boubacar, 22 ans",
+    initial: "On m'a amené ici après une crise avec des secousses."
+  },
+  deficit: {
+    title: "Déficit moteur",
+    patient: "Amadou, 64 ans",
+    initial: "Depuis ce matin, mon bras et ma jambe droits sont faibles."
+  },
+  enfant_fievre: {
+    title: "Fièvre chez l'enfant",
+    patient: "Mère de Lamine, enfant de 3 ans",
+    initial: "Docteur, mon enfant a de la fièvre depuis hier."
+  },
+  dehydration: {
+    title: "Déshydratation",
+    patient: "Seynabou, 5 ans",
+    initial: "Ma fille est très fatiguée et refuse de boire."
+  },
+  douleur_pelvienne: {
+    title: "Douleur pelvienne",
+    patient: "Ndeye, 25 ans",
+    initial: "J'ai mal dans le bas du ventre."
+  },
+  saignement: {
+    title: "Saignement gynécologique",
+    patient: "Aïssatou, 29 ans",
+    initial: "J'ai des saignements alors que je ne devrais pas avoir mes règles."
+  },
+  traumatisme: {
+    title: "Traumatisme",
+    patient: "Modou, 31 ans",
+    initial: "J'ai eu un accident de moto et j'ai mal à la jambe."
+  },
+  hemorragie: {
+    title: "Hémorragie",
+    patient: "Ibrahima, 42 ans",
+    initial: "Je saigne beaucoup depuis une blessure."
+  },
+  syncope: {
+    title: "Perte de connaissance",
+    patient: "Moussa, 48 ans",
+    initial: "J'ai perdu connaissance quelques instants hier."
   }
 };
 
