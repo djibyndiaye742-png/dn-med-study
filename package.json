@@ -20,9 +20,8 @@
   "server-only": "^0.0.1",
   "three": "latest",
   "@react-three/fiber": "^9",
-  "@react-three/drei": "latest",
-  "open-anatomy-3d": "0.1.0",
-  "open-anatomy-3d-react": "^0.1.1"
+  "@react-three/drei": "^10.7.9",
+  "open-anatomy-3d": "0.1.0"
 }
 
 }
