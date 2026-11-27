@@ -1,0 +1,31 @@
+name: Télécharger les modèles anatomiques
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Télécharger les modèles
+        run: node scripts/download-human-atlas.mjs
+
+      - name: Enregistrer les fichiers téléchargés
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/models
+          git diff --cached --quiet || git commit -m "Téléchargement des modèles anatomiques"
+          git push
