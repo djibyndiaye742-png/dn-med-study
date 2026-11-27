@@ -1,14 +1,21 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Html, useGLTF } from "@react-three/drei";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+
 import {
   modelUrl,
   ANATOMY_BY_KEY,
   structuresFor,
-  ATTRIBUTION,
 } from "open-anatomy-3d";
 
 import {
@@ -17,49 +24,126 @@ import {
   X,
   Eye,
   EyeOff,
-  Bone,
-  Activity,
-  Heart,
-  Brain,
   ChevronDown,
   Info,
   Layers,
+  Scan,
 } from "lucide-react";
+
+/* =========================
+   SYSTÈMES ANATOMIQUES
+========================= */
 
 const SYSTEMS = [
   { id: "skin", label: "Peau", color: "#D9A17C" },
-  { id: "skeleton", label: "Os", color: "#E9DCC1" },
+  { id: "skeleton", label: "Squelette", color: "#E9DCC1" },
   { id: "muscles", label: "Muscles", color: "#A83232" },
   { id: "organs", label: "Organes", color: "#D87955" },
   { id: "vessels", label: "Vaisseaux", color: "#D52F3D" },
   { id: "nerves", label: "Nerfs", color: "#E8C84A" },
 ];
 
+const ALL_SYSTEMS = SYSTEMS.map((item) => item.id);
+
 const normalize = (value = "") =>
-  value
+  String(value)
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+/* =========================
+   IDENTIFICATION DES SYSTÈMES
+========================= */
+
+function getSystemId(info) {
+  const value = normalize(
+    `${info?.system || ""} ${info?.category || ""}`
+  );
+
+  if (
+    value.includes("skeleton") ||
+    value.includes("skeletal") ||
+    value.includes("bone") ||
+    value.includes("os")
+  ) {
+    return "skeleton";
+  }
+
+  if (
+    value.includes("muscle") ||
+    value.includes("muscular")
+  ) {
+    return "muscles";
+  }
+
+  if (
+    value.includes("nerve") ||
+    value.includes("nervous")
+  ) {
+    return "nerves";
+  }
+
+  if (
+    value.includes("vessel") ||
+    value.includes("vascular") ||
+    value.includes("arter") ||
+    value.includes("vein") ||
+    value.includes("blood")
+  ) {
+    return "vessels";
+  }
+
+  if (
+    value.includes("skin") ||
+    value.includes("integument")
+  ) {
+    return "skin";
+  }
+
+  if (
+    value.includes("organ") ||
+    value.includes("digest") ||
+    value.includes("respiratory") ||
+    value.includes("urinary") ||
+    value.includes("cardiac")
+  ) {
+    return "organs";
+  }
+
+  return info?.system || "organs";
+}
+
+/* =========================
+   COULEURS ANATOMIQUES
+========================= */
 
 function getColor(info) {
-  if (!info) return "#B8C2CC";
+  const system = getSystemId(info);
 
-  const key = `${info.key || ""} ${info.category || ""}`.toLowerCase();
+  if (system === "muscles") return "#A83232";
+  if (system === "skeleton") return "#E9DCC1";
+  if (system === "nerves") return "#E8C84A";
+  if (system === "skin") return "#D9A17C";
 
-  if (info.system === "muscles") return "#A83232";
-  if (info.system === "skeleton") return "#E9DCC1";
-  if (info.system === "nerves") return "#E8C84A";
-  if (info.system === "skin") return "#D9A17C";
+  if (system === "vessels") {
+    const key = normalize(
+      `${info?.key || ""} ${info?.label || ""}`
+    );
 
-  if (info.system === "vessels") {
     if (key.includes("vein") || key.includes("veine")) {
       return "#2868C7";
     }
+
     return "#D52F3D";
   }
 
-  return info.color || "#D87955";
+  return info?.color || "#D87955";
 }
+
+/* =========================
+   RECHARGEMENT DU MODÈLE 3D
+========================= */
 
 function AnatomyModel({
   sex,
@@ -67,12 +151,16 @@ function AnatomyModel({
   onSelect,
   visibleSystems,
   isolated,
+  xray,
+  opacity,
 }) {
   const { scene } = useGLTF(
     modelUrl(sex),
     false,
     false,
-    (loader) => loader.setMeshoptDecoder(MeshoptDecoder)
+    (loader) => {
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
   );
 
   const model = useMemo(() => {
@@ -81,29 +169,34 @@ function AnatomyModel({
     copy.traverse((object) => {
       if (!object.isMesh) return;
 
-      const info = ANATOMY_BY_KEY[object.name];
+      const info =
+        ANATOMY_BY_KEY[object.name] ||
+        Object.values(ANATOMY_BY_KEY).find(
+          (item) => item.key === object.name
+        );
 
       if (!info) return;
 
-      const materials = Array.isArray(object.material)
+      object.userData.anatomyKey = info.key;
+      object.userData.anatomyInfo = info;
+
+      const originalMaterials = Array.isArray(object.material)
         ? object.material
         : [object.material];
 
-      const updated = materials.map((original) => {
+      const newMaterials = originalMaterials.map((original) => {
         const material = original.clone();
+
         material.color.set(getColor(info));
         material.roughness = 0.75;
         material.metalness = 0.02;
-        material.transparent = false;
-        material.opacity = 1;
+
         return material;
       });
 
       object.material = Array.isArray(object.material)
-        ? updated
-        : updated[0];
-
-      object.userData.anatomyKey = info.key;
+        ? newMaterials
+        : newMaterials[0];
     });
 
     return copy;
@@ -113,11 +206,18 @@ function AnatomyModel({
     model.traverse((object) => {
       if (!object.isMesh) return;
 
-      const info = ANATOMY_BY_KEY[object.name];
+      const info = object.userData.anatomyInfo;
+
       if (!info) return;
 
-      const systemVisible = visibleSystems.includes(info.system);
-      const isolatedVisible = !isolated || info.key === isolated;
+      const system = getSystemId(info);
+
+      const systemVisible =
+        visibleSystems.includes(system) ||
+        !ALL_SYSTEMS.includes(system);
+
+      const isolatedVisible =
+        !isolated || info.key === isolated;
 
       object.visible = systemVisible && isolatedVisible;
 
@@ -128,69 +228,133 @@ function AnatomyModel({
       materials.forEach((material) => {
         if (!material) return;
 
+        material.transparent = xray;
+        material.opacity = xray ? opacity : 1;
+        material.depthWrite = !xray;
+
         if (material.emissive) {
           material.emissive.set(
             selected === info.key ? "#287BFF" : "#000000"
           );
+
           material.emissiveIntensity =
-            selected === info.key ? 0.45 : 0;
+            selected === info.key ? 0.55 : 0;
         }
+
+        material.needsUpdate = true;
       });
     });
-  }, [model, visibleSystems, selected, isolated]);
+  }, [
+    model,
+    visibleSystems,
+    selected,
+    isolated,
+    xray,
+    opacity,
+  ]);
 
-  function handlePointerDown(event) {
+  function handleClick(event) {
     event.stopPropagation();
 
     const object = event.object;
-    const key =
-      object?.userData?.anatomyKey || object?.name;
 
-    if (key && ANATOMY_BY_KEY[key]) {
-      onSelect(key);
+    const key =
+      object?.userData?.anatomyKey ||
+      object?.name;
+
+    const info =
+      object?.userData?.anatomyInfo ||
+      ANATOMY_BY_KEY[key];
+
+    if (info?.key) {
+      onSelect(info.key);
     }
   }
 
   return (
     <primitive
       object={model}
-      onPointerDown={handlePointerDown}
+      onClick={handleClick}
     />
   );
 }
 
+/* =========================
+   CHARGEMENT
+========================= */
+
 function LoadingModel() {
   return (
     <Html center>
-      <div style={{ color: "#fff", fontSize: 14 }}>
-        Chargement du modèle...
+      <div
+        style={{
+          color: "#FFFFFF",
+          fontSize: 14,
+          background: "#172536",
+          padding: "13px 18px",
+          borderRadius: 12,
+          whiteSpace: "nowrap",
+        }}
+      >
+        Chargement de l'anatomie 3D...
       </div>
     </Html>
   );
 }
 
+/* =========================
+   COMPOSANT PRINCIPAL
+========================= */
+
 export default function Anatomie3D() {
+  const controlsRef = useRef(null);
+
   const [sex, setSex] = useState("male");
   const [selected, setSelected] = useState("");
   const [search, setSearch] = useState("");
-  const [visibleSystems, setVisibleSystems] = useState(
-    SYSTEMS.map((system) => system.id)
-  );
+
+  const [visibleSystems, setVisibleSystems] =
+    useState(ALL_SYSTEMS);
+
   const [isolated, setIsolated] = useState("");
+
   const [showSearch, setShowSearch] = useState(false);
   const [showLayers, setShowLayers] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
+
+  const [xray, setXray] = useState(false);
+  const [opacity, setOpacity] = useState(0.3);
+
+  /* =========================
+     DONNÉES ANATOMIQUES
+  ========================= */
 
   const structures = useMemo(() => {
     return structuresFor(sex) || [];
   }, [sex]);
 
+  const structureMap = useMemo(() => {
+    const map = {};
+
+    structures.forEach((item) => {
+      map[item.key] = item;
+    });
+
+    return map;
+  }, [structures]);
+
   const selectedInfo = selected
-    ? ANATOMY_BY_KEY[selected]
+    ? structureMap[selected] ||
+      ANATOMY_BY_KEY[selected] ||
+      null
     : null;
 
+  /* =========================
+     RECHERCHE
+  ========================= */
+
   const filteredStructures = useMemo(() => {
-    const query = normalize(search.trim());
+    const query = normalize(search);
 
     if (!query) return [];
 
@@ -202,32 +366,45 @@ export default function Anatomie3D() {
 
         return text.includes(query);
       })
-      .slice(0, 30);
+      .slice(0, 40);
   }, [structures, search]);
 
-  function toggleSystem(id) {
-    setVisibleSystems((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
-    );
-
-    setIsolated("");
-  }
+  /* =========================
+     SÉLECTION
+  ========================= */
 
   function selectStructure(key) {
     setSelected(key);
     setIsolated("");
-    setSearch("");
-    setShowSearch(false);
     setShowInfo(true);
+    setShowSearch(false);
+    setSearch("");
   }
 
-  function resetView() {
+  function clearSelection() {
     setSelected("");
     setIsolated("");
-    setVisibleSystems(SYSTEMS.map((item) => item.id));
   }
+
+  /* =========================
+     SYSTÈMES
+  ========================= */
+
+  function toggleSystem(id) {
+    setVisibleSystems((current) => {
+      if (current.includes(id)) {
+        return current.filter((item) => item !== id);
+      }
+
+      return [...current, id];
+    });
+
+    setIsolated("");
+  }
+
+  /* =========================
+     ISOLATION
+  ========================= */
 
   function isolateStructure() {
     if (!selectedInfo) return;
@@ -236,6 +413,37 @@ export default function Anatomie3D() {
       current === selected ? "" : selected
     );
   }
+
+  /* =========================
+     RÉINITIALISATION
+  ========================= */
+
+  function resetView() {
+    setSelected("");
+    setIsolated("");
+    setSearch("");
+
+    setVisibleSystems(ALL_SYSTEMS);
+
+    setXray(false);
+    setOpacity(0.3);
+
+    if (controlsRef.current) {
+      controlsRef.current.reset();
+    }
+  }
+
+  function changeSex(value) {
+    setSex(value);
+    setSelected("");
+    setIsolated("");
+    setVisibleSystems(ALL_SYSTEMS);
+    setXray(false);
+  }
+
+  /* =========================
+     STYLES
+  ========================= */
 
   const pageStyle = {
     background: "#0B1420",
@@ -261,8 +469,21 @@ export default function Anatomie3D() {
     whiteSpace: "nowrap",
   };
 
+  const activeButton = {
+    ...buttonStyle,
+    background: "#2563EB",
+    borderColor: "#2563EB",
+  };
+
+  /* =========================
+     INTERFACE
+  ========================= */
+
   return (
     <div style={pageStyle}>
+
+      {/* EN-TÊTE */}
+
       <div
         style={{
           padding: "16px 14px 10px",
@@ -275,7 +496,14 @@ export default function Anatomie3D() {
           <div style={{ fontSize: 21, fontWeight: 800 }}>
             Anatomie 3D
           </div>
-          <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 4 }}>
+
+          <div
+            style={{
+              color: "#94A3B8",
+              fontSize: 12,
+              marginTop: 4,
+            }}
+          >
             Atlas anatomique interactif
           </div>
         </div>
@@ -288,6 +516,8 @@ export default function Anatomie3D() {
           Rechercher
         </button>
       </div>
+
+      {/* RECHERCHE */}
 
       {showSearch && (
         <div style={{ padding: "5px 14px 12px" }}>
@@ -305,7 +535,9 @@ export default function Anatomie3D() {
 
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
               placeholder="Ex : cœur, foie, biceps..."
               autoFocus
               style={{
@@ -329,6 +561,7 @@ export default function Anatomie3D() {
                 border: 0,
                 background: "transparent",
                 color: "#94A3B8",
+                cursor: "pointer",
               }}
             >
               <X size={18} />
@@ -341,19 +574,26 @@ export default function Anatomie3D() {
                 marginTop: 7,
                 background: "#172536",
                 borderRadius: 12,
-                maxHeight: 190,
+                maxHeight: 220,
                 overflowY: "auto",
               }}
             >
               {filteredStructures.length === 0 ? (
-                <div style={{ padding: 14, color: "#94A3B8" }}>
+                <div
+                  style={{
+                    padding: 14,
+                    color: "#94A3B8",
+                  }}
+                >
                   Aucune structure trouvée.
                 </div>
               ) : (
                 filteredStructures.map((item) => (
                   <button
                     key={item.key}
-                    onClick={() => selectStructure(item.key)}
+                    onClick={() =>
+                      selectStructure(item.key)
+                    }
                     style={{
                       width: "100%",
                       padding: 12,
@@ -368,6 +608,7 @@ export default function Anatomie3D() {
                     <div style={{ fontWeight: 600 }}>
                       {item.label}
                     </div>
+
                     <div
                       style={{
                         fontSize: 11,
@@ -375,7 +616,7 @@ export default function Anatomie3D() {
                         marginTop: 3,
                       }}
                     >
-                      {item.system}
+                      {item.system} · {item.category}
                     </div>
                   </button>
                 ))
@@ -384,6 +625,8 @@ export default function Anatomie3D() {
           )}
         </div>
       )}
+
+      {/* COMMANDES */}
 
       <div
         style={{
@@ -394,29 +637,19 @@ export default function Anatomie3D() {
         }}
       >
         <button
-          style={{
-            ...buttonStyle,
-            background: sex === "male" ? "#2563EB" : "#172536",
-            borderColor: sex === "male" ? "#2563EB" : "#334155",
-          }}
-          onClick={() => {
-            setSex("male");
-            resetView();
-          }}
+          style={
+            sex === "male" ? activeButton : buttonStyle
+          }
+          onClick={() => changeSex("male")}
         >
           Homme
         </button>
 
         <button
-          style={{
-            ...buttonStyle,
-            background: sex === "female" ? "#2563EB" : "#172536",
-            borderColor: sex === "female" ? "#2563EB" : "#334155",
-          }}
-          onClick={() => {
-            setSex("female");
-            resetView();
-          }}
+          style={
+            sex === "female" ? activeButton : buttonStyle
+          }
+          onClick={() => changeSex("female")}
         >
           Femme
         </button>
@@ -430,10 +663,24 @@ export default function Anatomie3D() {
           <ChevronDown size={14} />
         </button>
 
-        <button style={buttonStyle} onClick={resetView}>
+        <button
+          style={xray ? activeButton : buttonStyle}
+          onClick={() => setXray(!xray)}
+        >
+          <Scan size={16} />
+          Rayon X
+        </button>
+
+        <button
+          style={buttonStyle}
+          onClick={resetView}
+          title="Réinitialiser"
+        >
           <RotateCcw size={16} />
         </button>
       </div>
+
+      {/* PANNEAU DES SYSTÈMES */}
 
       {showLayers && (
         <div
@@ -445,7 +692,9 @@ export default function Anatomie3D() {
           }}
         >
           {SYSTEMS.map((system) => {
-            const active = visibleSystems.includes(system.id);
+            const active = visibleSystems.includes(
+              system.id
+            );
 
             return (
               <button
@@ -453,8 +702,12 @@ export default function Anatomie3D() {
                 onClick={() => toggleSystem(system.id)}
                 style={{
                   ...buttonStyle,
-                  background: active ? "#24364A" : "#111C29",
-                  borderColor: active ? system.color : "#334155",
+                  background: active
+                    ? "#24364A"
+                    : "#111C29",
+                  borderColor: active
+                    ? system.color
+                    : "#334155",
                   opacity: active ? 1 : 0.55,
                 }}
               >
@@ -466,13 +719,56 @@ export default function Anatomie3D() {
                     background: system.color,
                   }}
                 />
+
                 {system.label}
-                {active ? <Eye size={14} /> : <EyeOff size={14} />}
+
+                {active ? (
+                  <Eye size={14} />
+                ) : (
+                  <EyeOff size={14} />
+                )}
               </button>
             );
           })}
         </div>
       )}
+
+      {/* RÉGLAGE RAYONS X */}
+
+      {xray && (
+        <div
+          style={{
+            padding: "0 16px 12px",
+            color: "#CBD5E1",
+            fontSize: 12,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 6,
+            }}
+          >
+            <span>Transparence</span>
+            <span>{Math.round(opacity * 100)} %</span>
+          </div>
+
+          <input
+            type="range"
+            min="0.1"
+            max="0.8"
+            step="0.05"
+            value={opacity}
+            onChange={(event) =>
+              setOpacity(Number(event.target.value))
+            }
+            style={{ width: "100%" }}
+          />
+        </div>
+      )}
+
+      {/* MODÈLE 3D */}
 
       <div
         style={{
@@ -484,15 +780,23 @@ export default function Anatomie3D() {
         }}
       >
         <Canvas
-          camera={{ position: [0, 0, 4.5], fov: 38 }}
+          camera={{
+            position: [0, 0, 4.5],
+            fov: 38,
+          }}
           dpr={[1, 1.7]}
-          gl={{ antialias: true, alpha: true }}
+          gl={{
+            antialias: true,
+            alpha: true,
+          }}
         >
           <ambientLight intensity={1.1} />
+
           <directionalLight
             position={[4, 6, 5]}
             intensity={2}
           />
+
           <directionalLight
             position={[-4, 2, -3]}
             intensity={0.8}
@@ -505,12 +809,16 @@ export default function Anatomie3D() {
               onSelect={selectStructure}
               visibleSystems={visibleSystems}
               isolated={isolated}
+              xray={xray}
+              opacity={opacity}
             />
           </Suspense>
 
           <OrbitControls
+            ref={controlsRef}
             enablePan={false}
             enableZoom
+            enableRotate
             minDistance={2}
             maxDistance={9}
             rotateSpeed={0.8}
@@ -518,14 +826,13 @@ export default function Anatomie3D() {
           />
         </Canvas>
 
+        {/* BOUTON INFORMATIONS */}
+
         <div
           style={{
             position: "absolute",
             top: 12,
             right: 12,
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
           }}
         >
           <button
@@ -541,6 +848,8 @@ export default function Anatomie3D() {
             <Info size={19} />
           </button>
         </div>
+
+        {/* STRUCTURE SÉLECTIONNÉE */}
 
         {selectedInfo && showInfo && (
           <div
@@ -593,20 +902,19 @@ export default function Anatomie3D() {
                     marginTop: 5,
                   }}
                 >
-                  {selectedInfo.system} · {selectedInfo.category}
+                  {selectedInfo.system} ·{" "}
+                  {selectedInfo.category}
                 </div>
               </div>
 
               <button
-                onClick={() => {
-                  setSelected("");
-                  setIsolated("");
-                }}
+                onClick={clearSelection}
                 style={{
                   border: 0,
                   background: "transparent",
                   color: "#94A3B8",
                   alignSelf: "flex-start",
+                  cursor: "pointer",
                 }}
               >
                 <X size={20} />
@@ -619,7 +927,10 @@ export default function Anatomie3D() {
                 ...buttonStyle,
                 width: "100%",
                 marginTop: 13,
-                background: isolated === selected ? "#2563EB" : "#263B52",
+                background:
+                  isolated === selected
+                    ? "#2563EB"
+                    : "#263B52",
               }}
             >
               {isolated === selected
@@ -629,6 +940,8 @@ export default function Anatomie3D() {
           </div>
         )}
       </div>
+
+      {/* AIDE */}
 
       <div
         style={{
@@ -647,4 +960,4 @@ export default function Anatomie3D() {
       </div>
     </div>
   );
-}
+          }
