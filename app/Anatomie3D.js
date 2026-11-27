@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF, Html } from "@react-three/drei";
-import { modelUrl, ANATOMY_BY_KEY, ATTRIBUTION } from "open-anatomy-3d";
-import { Suspense } from "react";
+import { OrbitControls, Html, useGLTF } from "@react-three/drei";
+import {
+  modelUrl,
+  ANATOMY_BY_KEY,
+  ATTRIBUTION,
+} from "open-anatomy-3d";
 
 const SYSTEMS = [
   { id: "skin", label: "Peau" },
@@ -16,14 +19,15 @@ const SYSTEMS = [
 ];
 
 function HumanBody({ sex, layers, onSelect }) {
-  const { scene } = useGLTF(modelUrl(sex));
+  // Le troisième argument active le décodeur Meshopt.
+  const { scene } = useGLTF(modelUrl(sex), false, true);
 
   const model = useMemo(() => scene.clone(true), [scene]);
 
   useEffect(() => {
     model.traverse((object) => {
-      if (SYSTEMS.some((system) => system.id === object.name)) {
-        object.visible = layers[object.name] !== false;
+      if (Object.prototype.hasOwnProperty.call(layers, object.name)) {
+        object.visible = layers[object.name];
       }
     });
   }, [model, layers]);
@@ -31,10 +35,13 @@ function HumanBody({ sex, layers, onSelect }) {
   return (
     <primitive
       object={model}
-      onPointerDown={(event) => {
+      onClick={(event) => {
         event.stopPropagation();
+
         const key = event.object.name;
-        if (ANATOMY_BY_KEY[key]) onSelect(key);
+        if (ANATOMY_BY_KEY[key]) {
+          onSelect(key);
+        }
       }}
     />
   );
@@ -43,8 +50,8 @@ function HumanBody({ sex, layers, onSelect }) {
 function Loading() {
   return (
     <Html center>
-      <div style={{ color: "#2563eb", fontWeight: "bold" }}>
-        Chargement du corps humain...
+      <div style={{ color: "#2563eb", fontWeight: 700 }}>
+        Chargement de l'anatomie 3D...
       </div>
     </Html>
   );
@@ -52,6 +59,7 @@ function Loading() {
 
 export default function Anatomie3D() {
   const [sex, setSex] = useState("male");
+
   const [layers, setLayers] = useState({
     skin: true,
     skeleton: false,
@@ -60,9 +68,12 @@ export default function Anatomie3D() {
     vessels: false,
     nerves: false,
   });
+
   const [selected, setSelected] = useState(null);
 
-  const structure = selected ? ANATOMY_BY_KEY[selected] : null;
+  const structure = selected
+    ? ANATOMY_BY_KEY[selected]
+    : null;
 
   function toggleLayer(id) {
     setLayers((previous) => ({
@@ -72,63 +83,84 @@ export default function Anatomie3D() {
   }
 
   return (
-    <div style={{ padding: 16, color: "#10243A" }}>
-      <h1 style={{ fontSize: 25, fontWeight: 800 }}>
+    <div style={{
+      padding: 16,
+      color: "#10243A",
+      width: "100%",
+    }}>
+
+      <h1 style={{
+        fontSize: 25,
+        fontWeight: 800,
+        marginBottom: 6,
+      }}>
         Anatomie 3D
       </h1>
 
-      <p style={{ color: "#64748b", marginBottom: 18 }}>
+      <p style={{
+        color: "#64748b",
+        marginBottom: 18,
+      }}>
         Explore le corps humain et découvre ses structures anatomiques.
       </p>
 
       <div style={{
         display: "flex",
         gap: 10,
-        marginBottom: 15
+        marginBottom: 15,
       }}>
-        <button
-          onClick={() => setSex("male")}
-          style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            background: sex === "male" ? "#2563eb" : "#e2e8f0",
-            color: sex === "male" ? "white" : "#10243A",
-            border: 0
-          }}
-        >
-          Masculin
-        </button>
-
-        <button
-          onClick={() => setSex("female")}
-          style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            background: sex === "female" ? "#2563eb" : "#e2e8f0",
-            color: sex === "female" ? "white" : "#10243A",
-            border: 0
-          }}
-        >
-          Féminin
-        </button>
+        {[
+          { id: "male", label: "Masculin" },
+          { id: "female", label: "Féminin" },
+        ].map((item) => (
+          <button
+            key={item.id}
+            onClick={() => {
+              setSex(item.id);
+              setSelected(null);
+            }}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 10,
+              border: 0,
+              background:
+                sex === item.id ? "#2563eb" : "#e2e8f0",
+              color:
+                sex === item.id ? "white" : "#10243A",
+              fontWeight: 600,
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
+
+      <h3 style={{
+        fontWeight: 700,
+        marginBottom: 10,
+      }}>
+        Systèmes anatomiques
+      </h3>
 
       <div style={{
         display: "flex",
         flexWrap: "wrap",
         gap: 8,
-        marginBottom: 15
+        marginBottom: 15,
       }}>
         {SYSTEMS.map((system) => (
           <button
             key={system.id}
             onClick={() => toggleLayer(system.id)}
             style={{
-              padding: "8px 11px",
+              padding: "9px 12px",
               borderRadius: 9,
               border: "1px solid #cbd5e1",
-              background: layers[system.id] ? "#dbeafe" : "white",
-              color: "#10243A"
+              background: layers[system.id]
+                ? "#dbeafe"
+                : "white",
+              color: "#10243A",
+              fontWeight: 600,
             }}
           >
             {layers[system.id] ? "✓ " : ""}
@@ -143,14 +175,21 @@ export default function Anatomie3D() {
         borderRadius: 16,
         overflow: "hidden",
         background: "#edf3fa",
-        border: "1px solid #dbe3ed"
+        border: "1px solid #dbe3ed",
       }}>
         <Canvas
-          camera={{ position: [0, 1, 4], fov: 40 }}
+          camera={{
+            position: [0, 1, 4],
+            fov: 40,
+          }}
           dpr={[1, 1.5]}
         >
           <ambientLight intensity={1.5} />
-          <directionalLight position={[3, 5, 4]} intensity={2} />
+
+          <directionalLight
+            position={[3, 5, 4]}
+            intensity={2}
+          />
 
           <Suspense fallback={<Loading />}>
             <HumanBody
@@ -170,37 +209,58 @@ export default function Anatomie3D() {
       </div>
 
       <div style={{
-        marginTop: 15,
-        padding: 15,
+        marginTop: 16,
+        padding: 16,
         borderRadius: 12,
-        background: "#f1f5f9"
+        background: "#f1f5f9",
       }}>
-        <h3 style={{ fontWeight: 700 }}>
-          Structure anatomique sélectionnée
+        <h3 style={{
+          fontWeight: 700,
+          marginBottom: 10,
+        }}>
+          Structure anatomique
         </h3>
 
         {structure ? (
           <>
-            <p style={{ fontSize: 20, color: "#2563eb", fontWeight: 700 }}>
+            <p style={{
+              fontSize: 20,
+              color: "#2563eb",
+              fontWeight: 700,
+            }}>
               {structure.label}
             </p>
-            <p>Système : {structure.system}</p>
-            <p>Catégorie : {structure.category}</p>
+
+            <p>
+              Système : {structure.system}
+            </p>
+
+            <p>
+              Catégorie : {structure.category}
+            </p>
           </>
         ) : (
           <p style={{ color: "#64748b" }}>
-            Sélectionne une structure directement sur le corps humain.
+            Sélectionne une structure sur le modèle 3D.
           </p>
         )}
       </div>
 
       <p style={{
-        marginTop: 15,
+        marginTop: 18,
         fontSize: 11,
-        color: "#64748b"
+        color: "#64748b",
       }}>
         {ATTRIBUTION}
       </p>
+
+      <p style={{
+        fontSize: 11,
+        color: "#64748b",
+      }}>
+        Modèle pédagogique. Ne constitue pas un dispositif médical.
+      </p>
+
     </div>
   );
-          }
+}
