@@ -1,6 +1,6 @@
 name: Télécharger les modèles anatomiques
 
-on:
+"on":
   workflow_dispatch:
 
 permissions:
@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   download:
+    name: Télécharger Human Atlas
     runs-on: ubuntu-latest
 
     steps:
@@ -19,13 +20,20 @@ jobs:
         with:
           node-version: 20
 
-      - name: Télécharger les modèles
+      - name: Vérifier le script
+        run: |
+          if [ ! -f scripts/download-human-atlas.mjs ]; then
+            echo "ERREUR : script introuvable"
+            exit 1
+          fi
+
+      - name: Télécharger les modèles anatomiques
         run: node scripts/download-human-atlas.mjs
 
       - name: Enregistrer les modèles
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/models
+          git add public/models/
           git diff --cached --quiet || git commit -m "Téléchargement des modèles anatomiques"
           git push
