@@ -17,6 +17,14 @@ import {
   BookMarked, RefreshCw, Stethoscope, ShieldCheck,
   History, Bookmark, FileCheck, Eye, CheckCircle2
 } from "lucide-react";
+import {
+  Activity,
+  Home,
+  BookOpen,
+  Brain,
+  ClipboardList,
+  // conserve tous les autres imports
+} from "lucide-react";
 
 import { supabase } from "../lib/supabase";
 import PatientVirtuel from "./PatientVirtuel";
