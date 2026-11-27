@@ -11,6 +11,8 @@ import React, {
 import * as THREE from "three";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../lib/firebase";
 
 import {
   Eye,
@@ -29,66 +31,21 @@ import {
 ========================================================= */
 
 const SYSTEMS = {
-  skeletal: {
-    name: "Système squelettique",
-    color: "#E8D8B8",
-  },
-  muscular: {
-    name: "Système musculaire",
-    color: "#C96B68",
-  },
-  arterial: {
-    name: "Système artériel",
-    color: "#E53935",
-  },
-  venous: {
-    name: "Système veineux",
-    color: "#3979D8",
-  },
-  nervous: {
-    name: "Système nerveux",
-    color: "#F4D35E",
-  },
-  digestive: {
-    name: "Système digestif",
-    color: "#D99A52",
-  },
-  respiratory: {
-    name: "Système respiratoire",
-    color: "#D98AA8",
-  },
-  urinary: {
-    name: "Système urinaire",
-    color: "#9A79C8",
-  },
-  reproductive: {
-    name: "Système reproducteur",
-    color: "#B67A9B",
-  },
-  lymphatic: {
-    name: "Système lymphatique",
-    color: "#77B99A",
-  },
-  endocrine: {
-    name: "Système endocrinien",
-    color: "#E8B65C",
-  },
-  integumentary: {
-    name: "Système tégumentaire",
-    color: "#D7A58A",
-  },
-  connective: {
-    name: "Tissus conjonctifs",
-    color: "#AEC3BB",
-  },
-  sensory: {
-    name: "Organes sensoriels",
-    color: "#72B8C8",
-  },
-  cardiac: {
-    name: "Système cardiaque",
-    color: "#D94B55",
-  },
+  skeletal: { name: "Système squelettique", color: "#E8D8B8" },
+  muscular: { name: "Système musculaire", color: "#C96B68" },
+  arterial: { name: "Système artériel", color: "#E53935" },
+  venous: { name: "Système veineux", color: "#3979D8" },
+  nervous: { name: "Système nerveux", color: "#F4D35E" },
+  digestive: { name: "Système digestif", color: "#D99A52" },
+  respiratory: { name: "Système respiratoire", color: "#D98AA8" },
+  urinary: { name: "Système urinaire", color: "#9A79C8" },
+  reproductive: { name: "Système reproducteur", color: "#B67A9B" },
+  lymphatic: { name: "Système lymphatique", color: "#77B99A" },
+  endocrine: { name: "Système endocrinien", color: "#E8B65C" },
+  integumentary: { name: "Système tégumentaire", color: "#D7A58A" },
+  connective: { name: "Tissus conjonctifs", color: "#AEC3BB" },
+  sensory: { name: "Organes sensoriels", color: "#72B8C8" },
+  cardiac: { name: "Système cardiaque", color: "#D94B55" },
 };
 
 const BACKGROUND = "#101827";
@@ -101,17 +58,12 @@ async function loadAtlas() {
   const response = await fetch("/models/atlas.json");
 
   if (!response.ok) {
-    throw new Error(
-      "Impossible de charger /models/atlas.json"
-    );
+    throw new Error("Impossible de charger /models/atlas.json");
   }
 
   const atlas = await response.json();
 
-  if (
-    !Array.isArray(atlas.parts) ||
-    !Array.isArray(atlas.chunks)
-  ) {
+  if (!Array.isArray(atlas.parts) || !Array.isArray(atlas.chunks)) {
     throw new Error("Le manifeste anatomique est invalide.");
   }
 
@@ -146,17 +98,13 @@ async function loadAtlas() {
     );
 
     if (!fileResponse.ok) {
-      throw new Error(
-        `Impossible de charger le modèle ${filename}`
-      );
+      throw new Error(`Impossible de charger le modèle ${filename}`);
     }
 
     const buffer = await fileResponse.arrayBuffer();
 
     if (buffer.byteLength !== chunk.bytes) {
-      throw new Error(
-        `Taille incorrecte pour ${filename}`
-      );
+      throw new Error(`Taille incorrecte pour ${filename}`);
     }
 
     chunkBuffers.push(buffer);
@@ -166,9 +114,7 @@ async function loadAtlas() {
     const buffer = chunkBuffers[part.chunk];
 
     if (!buffer) {
-      throw new Error(
-        `Bloc introuvable pour ${part.name}`
-      );
+      throw new Error(`Bloc introuvable pour ${part.name}`);
     }
 
     const positions = new Float32Array(
@@ -201,9 +147,7 @@ async function loadAtlas() {
       new THREE.BufferAttribute(normals, 3, true)
     );
 
-    geometry.setIndex(
-      new THREE.BufferAttribute(indices, 1)
-    );
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
     const system = part.system || "connective";
 
@@ -233,7 +177,6 @@ async function loadAtlas() {
   }
 
   const bounds = new THREE.Box3().setFromObject(root);
-
   const center = new THREE.Vector3();
   const size = new THREE.Vector3();
 
@@ -242,14 +185,8 @@ async function loadAtlas() {
 
   root.position.sub(center);
 
-  const maxDimension = Math.max(
-    size.x,
-    size.y,
-    size.z
-  );
-
-  const scale =
-    maxDimension > 0 ? 2.7 / maxDimension : 1;
+  const maxDimension = Math.max(size.x, size.y, size.z);
+  const scale = maxDimension > 0 ? 2.7 / maxDimension : 1;
 
   root.scale.setScalar(scale);
   root.updateMatrixWorld(true);
@@ -288,12 +225,10 @@ function AnatomicalScene({
 
       const system = object.userData.system;
 
-      const systemVisible =
-        visibleSystems.includes(system);
+      const systemVisible = visibleSystems.includes(system);
 
       const objectKey =
-        object.userData.conceptId ??
-        object.userData.id;
+        object.userData.conceptId ?? object.userData.id;
 
       const selected =
         selectedConcept != null &&
@@ -303,12 +238,7 @@ function AnatomicalScene({
         systemVisible &&
         (!isolate || !selectedConcept || selected);
     });
-  }, [
-    model,
-    visibleSystems,
-    selectedConcept,
-    isolate,
-  ]);
+  }, [model, visibleSystems, selectedConcept, isolate]);
 
   useEffect(() => {
     if (!model) return;
@@ -316,8 +246,7 @@ function AnatomicalScene({
     model.root.traverse((object) => {
       if (!object.isMesh) return;
 
-      const baseMaterial =
-        object.userData.baseMaterial;
+      const baseMaterial = object.userData.baseMaterial;
 
       if (!baseMaterial) return;
 
@@ -327,8 +256,7 @@ function AnatomicalScene({
       }
 
       const objectKey =
-        object.userData.conceptId ??
-        object.userData.id;
+        object.userData.conceptId ?? object.userData.id;
 
       if (
         selectedConcept != null &&
@@ -336,14 +264,9 @@ function AnatomicalScene({
       ) {
         const highlighted = baseMaterial.clone();
 
-        highlighted.emissive = new THREE.Color(
-          "#00C8FF"
-        );
-
+        highlighted.emissive = new THREE.Color("#00C8FF");
         highlighted.emissiveIntensity = 0.55;
-
-        highlighted.color =
-          baseMaterial.color.clone();
+        highlighted.color = baseMaterial.color.clone();
 
         object.material = highlighted;
       }
@@ -356,7 +279,6 @@ function AnatomicalScene({
     if (!model) return;
 
     const canvas = gl.domElement;
-
     let startPointer = null;
 
     const handlePointerDown = (event) => {
@@ -394,14 +316,8 @@ function AnatomicalScene({
       if (!rect.width || !rect.height) return;
 
       const pointer = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) *
-          2 -
-          1,
-        -(
-          ((event.clientY - rect.top) / rect.height) *
-            2 -
-          1
-        )
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -(((event.clientY - rect.top) / rect.height) * 2 - 1)
       );
 
       camera.updateMatrixWorld(true);
@@ -409,11 +325,10 @@ function AnatomicalScene({
 
       raycaster.setFromCamera(pointer, camera);
 
-      const intersections =
-        raycaster.intersectObjects(
-          model.root.children,
-          true
-        );
+      const intersections = raycaster.intersectObjects(
+        model.root.children,
+        true
+      );
 
       const isVisible = (object) => {
         let current = object;
@@ -429,59 +344,29 @@ function AnatomicalScene({
         return true;
       };
 
-      const hit = intersections.find(
-        ({ object }) => {
-          return (
-            object.isMesh &&
-            object.userData?.id != null &&
-            isVisible(object)
-          );
-        }
-      );
+      const hit = intersections.find(({ object }) => {
+        return (
+          object.isMesh &&
+          object.userData?.id != null &&
+          isVisible(object)
+        );
+      });
 
       if (!hit) return;
 
       onSelect(hit.object.userData);
     };
 
-    canvas.addEventListener(
-      "pointerdown",
-      handlePointerDown
-    );
-
-    canvas.addEventListener(
-      "pointerup",
-      handlePointerUp
-    );
-
-    canvas.addEventListener(
-      "pointercancel",
-      handlePointerCancel
-    );
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointercancel", handlePointerCancel);
 
     return () => {
-      canvas.removeEventListener(
-        "pointerdown",
-        handlePointerDown
-      );
-
-      canvas.removeEventListener(
-        "pointerup",
-        handlePointerUp
-      );
-
-      canvas.removeEventListener(
-        "pointercancel",
-        handlePointerCancel
-      );
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointerup", handlePointerUp);
+      canvas.removeEventListener("pointercancel", handlePointerCancel);
     };
-  }, [
-    model,
-    gl,
-    camera,
-    raycaster,
-    onSelect,
-  ]);
+  }, [model, gl, camera, raycaster, onSelect]);
 
   if (!model) return null;
 
@@ -526,24 +411,49 @@ function AnatomicalScene({
 ========================================================= */
 
 export default function Anatomie3D() {
-  const [model, setModel] = useState(null);
+  /* AUTHENTIFICATION */
 
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const [model, setModel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [visibleSystems, setVisibleSystems] = useState([]);
-
   const [selected, setSelected] = useState(null);
-
   const [isolate, setIsolate] = useState(false);
-
   const [showInfo, setShowInfo] = useState(true);
 
   const controlsRef = useRef(null);
 
-  /* CHARGEMENT DU MODÈLE */
+  /* =====================================================
+     VÉRIFICATION FIREBASE
+     Un étudiant non connecté est redirigé vers /connexion.
+  ===================================================== */
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAuthenticated(true);
+        setAuthChecked(true);
+      } else {
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+        window.location.replace("/connexion");
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  /* =====================================================
+     CHARGEMENT DU MODÈLE UNIQUEMENT APRÈS CONNEXION
+  ===================================================== */
+
+  useEffect(() => {
+    if (!authChecked || !isAuthenticated) return;
+
     let cancelled = false;
 
     async function start() {
@@ -585,15 +495,12 @@ export default function Anatomie3D() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authChecked, isAuthenticated]);
 
   /* SÉLECTION D'UNE STRUCTURE */
 
   const handleSelect = useCallback((part) => {
-    setSelected({
-      ...part,
-    });
-
+    setSelected({ ...part });
     setShowInfo(true);
     setIsolate(false);
   }, []);
@@ -603,9 +510,7 @@ export default function Anatomie3D() {
   const toggleSystem = useCallback((systemId) => {
     setVisibleSystems((previous) => {
       if (previous.includes(systemId)) {
-        return previous.filter(
-          (item) => item !== systemId
-        );
+        return previous.filter((item) => item !== systemId);
       }
 
       return [...previous, systemId];
@@ -651,14 +556,9 @@ export default function Anatomie3D() {
     if (!controls) return;
 
     const camera = controls.object;
-
     const direction = new THREE.Vector3();
 
-    direction.subVectors(
-      camera.position,
-      controls.target
-    );
-
+    direction.subVectors(camera.position, controls.target);
     direction.multiplyScalar(0.8);
 
     camera.position.copy(
@@ -674,14 +574,9 @@ export default function Anatomie3D() {
     if (!controls) return;
 
     const camera = controls.object;
-
     const direction = new THREE.Vector3();
 
-    direction.subVectors(
-      camera.position,
-      controls.target
-    );
-
+    direction.subVectors(camera.position, controls.target);
     direction.multiplyScalar(1.25);
 
     camera.position.copy(
@@ -694,12 +589,59 @@ export default function Anatomie3D() {
   /* LIBELLÉ DU SYSTÈME */
 
   const selectedSystem = selected
-    ? SYSTEMS[selected.system]?.name ||
-      selected.system
+    ? SYSTEMS[selected.system]?.name || selected.system
     : "";
 
   /* =====================================================
-     AFFICHAGE
+     ÉCRAN D'ATTENTE : VÉRIFICATION DE CONNEXION
+  ===================================================== */
+
+  if (!authChecked || !isAuthenticated) {
+    return (
+      <div
+        style={{
+          minHeight: "300px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "12px",
+          padding: "24px",
+          background: "#F4F6FA",
+          borderRadius: "16px",
+          color: "#172337",
+          fontFamily: "Arial, sans-serif",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            width: "34px",
+            height: "34px",
+            border: "4px solid #D5DFEA",
+            borderTopColor: "#2563EB",
+            borderRadius: "50%",
+            animation: "dnSpin 1s linear infinite",
+          }}
+        />
+
+        <strong>
+          Vérification de votre connexion...
+        </strong>
+
+        <style jsx>{`
+          @keyframes dnSpin {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  /* =====================================================
+     AFFICHAGE DE L'ATLAS
   ===================================================== */
 
   return (
@@ -805,8 +747,7 @@ export default function Anatomie3D() {
                   border: "4px solid #42546B",
                   borderTopColor: "#06B6D4",
                   borderRadius: "50%",
-                  animation:
-                    "dnSpin 1s linear infinite",
+                  animation: "dnSpin 1s linear infinite",
                 }}
               />
 
@@ -854,9 +795,8 @@ export default function Anatomie3D() {
                     color: "#C5D0DC",
                   }}
                 >
-                  Vérifie la présence de atlas.json et
-                  des fichiers body-*.bin dans
-                  public/models/.
+                  Vérifie la présence de atlas.json et des
+                  fichiers body-*.bin dans public/models/.
                 </p>
               </div>
             </div>
@@ -1096,8 +1036,7 @@ export default function Anatomie3D() {
                   zIndex: 3,
                 }}
               >
-                Active un système pour afficher les
-                structures.
+                Active un système pour afficher les structures.
               </div>
             )}
         </div>
@@ -1185,62 +1124,52 @@ export default function Anatomie3D() {
                 gap: "8px",
               }}
             >
-              {Object.entries(SYSTEMS).map(
-                ([id, system]) => {
-                  const active =
-                    visibleSystems.includes(id);
+              {Object.entries(SYSTEMS).map(([id, system]) => {
+                const active = visibleSystems.includes(id);
 
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => toggleSystem(id)}
+                return (
+                  <button
+                    key={id}
+                    onClick={() => toggleSystem(id)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      textAlign: "left",
+                      padding: "10px",
+                      borderRadius: "9px",
+                      border: active
+                        ? "1px solid #2563EB"
+                        : "1px solid #E2E8F0",
+                      background: active ? "#EFF6FF" : "#FFFFFF",
+                      color: "#26364A",
+                      cursor: "pointer",
+                      fontSize: "11px",
+                      fontWeight: active ? "700" : "500",
+                    }}
+                  >
+                    <span
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        textAlign: "left",
-                        padding: "10px",
-                        borderRadius: "9px",
-                        border: active
-                          ? "1px solid #2563EB"
-                          : "1px solid #E2E8F0",
-                        background: active
-                          ? "#EFF6FF"
-                          : "#FFFFFF",
-                        color: "#26364A",
-                        cursor: "pointer",
-                        fontSize: "11px",
-                        fontWeight: active
-                          ? "700"
-                          : "500",
+                        width: "11px",
+                        height: "11px",
+                        flexShrink: 0,
+                        borderRadius: "50%",
+                        background: system.color,
                       }}
-                    >
-                      <span
-                        style={{
-                          width: "11px",
-                          height: "11px",
-                          flexShrink: 0,
-                          borderRadius: "50%",
-                          background: system.color,
-                        }}
-                      />
+                    />
 
-                      <span style={{ flex: 1 }}>
-                        {system.name}
-                      </span>
+                    <span style={{ flex: 1 }}>
+                      {system.name}
+                    </span>
 
-                      {active ? (
-                        <Eye size={14} />
-                      ) : (
-                        <EyeOff
-                          size={14}
-                          color="#A0AEC0"
-                        />
-                      )}
-                    </button>
-                  );
-                }
-              )}
+                    {active ? (
+                      <Eye size={14} />
+                    ) : (
+                      <EyeOff size={14} color="#A0AEC0" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
@@ -1272,12 +1201,11 @@ export default function Anatomie3D() {
                   margin: "7px 0 0",
                 }}
               >
-                Active un ou plusieurs systèmes
-                anatomiques. Touche ensuite une structure
-                du modèle pour afficher son nom et ses
-                informations. Fais glisser ton doigt
-                pour tourner le corps et utilise deux
-                doigts pour zoomer.
+                Active un ou plusieurs systèmes anatomiques.
+                Touche ensuite une structure du modèle pour
+                afficher son nom et ses informations. Fais
+                glisser ton doigt pour tourner le corps et
+                utilise deux doigts pour zoomer.
               </p>
             </section>
           )}
@@ -1336,16 +1264,5 @@ const smallButton = {
   borderRadius: "8px",
   fontSize: "11px",
   fontWeight: "600",
-  cursor: "pointer",
-};
-
-const primaryButton = {
-  padding: "9px 13px",
-  background: "#2563EB",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  fontSize: "11px",
-  fontWeight: "700",
   cursor: "pointer",
 };
