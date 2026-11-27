@@ -31,7 +31,8 @@ const NAVIGATION = [
   { id: "courses", label: "Mes cours", icon: BookOpen },
   { id: "revision", label: "Réviser", icon: Brain },
   { id: "exams", label: "Examens", icon: ClipboardList },
-  { id: "ai", label: "Assistant IA", icon: Sparkles }
+  { id: "ai", label: "Assistant IA", icon: Sparkles },
+  { id: "patient", label: "Patient virtuel", icon: Stethoscope }
 ];
 
 const TOOLS = [
