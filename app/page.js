@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
+import PatientVirtuel from "./PatientVirtuel";
 
 const PdfViewer = dynamic(() => import("./PdfViewer"), {
   ssr: false
