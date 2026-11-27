@@ -21,6 +21,7 @@
   "three": "latest",
   "@react-three/fiber": "^9",
   "@react-three/drei": "latest"
+  "open-anatomy-3d": "0.1.0"
 }
 
 }
