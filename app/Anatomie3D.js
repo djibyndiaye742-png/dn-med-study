@@ -1,64 +1,84 @@
 "use client";
 
-import {
-  Suspense,
-  useEffect,
-  useMemo,
-  useState
-} from "react";
-
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-
-import {
-  OrbitControls,
-  Html,
-  useGLTF
-} from "@react-three/drei";
-
+import { OrbitControls, Html, useGLTF } from "@react-three/drei";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-
 import {
   modelUrl,
   ANATOMY_BY_KEY,
-  ANATOMY_STRUCTURES,
+  structuresFor,
   ATTRIBUTION,
-  structuresFor
 } from "open-anatomy-3d";
 
+import {
+  Search,
+  RotateCcw,
+  X,
+  Eye,
+  EyeOff,
+  Bone,
+  Activity,
+  Heart,
+  Brain,
+  ChevronDown,
+  Info,
+  Layers,
+} from "lucide-react";
 
 const SYSTEMS = [
-  { id: "skin", label: "Peau", color: "#E8B89A" },
-  { id: "skeleton", label: "Squelette", color: "#F5E8C8" },
-  { id: "muscles", label: "Muscles", color: "#C84B50" },
-  { id: "organs", label: "Organes", color: "#D97757" },
-  { id: "vessels", label: "Vaisseaux", color: "#D93652" },
-  { id: "nerves", label: "Nerfs", color: "#E6BD36" }
+  { id: "skin", label: "Peau", color: "#D9A17C" },
+  { id: "skeleton", label: "Os", color: "#E9DCC1" },
+  { id: "muscles", label: "Muscles", color: "#A83232" },
+  { id: "organs", label: "Organes", color: "#D87955" },
+  { id: "vessels", label: "Vaisseaux", color: "#D52F3D" },
+  { id: "nerves", label: "Nerfs", color: "#E8C84A" },
 ];
 
+const normalize = (value = "") =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
-function HumanBody({
+function getColor(info) {
+  if (!info) return "#B8C2CC";
+
+  const key = `${info.key || ""} ${info.category || ""}`.toLowerCase();
+
+  if (info.system === "muscles") return "#A83232";
+  if (info.system === "skeleton") return "#E9DCC1";
+  if (info.system === "nerves") return "#E8C84A";
+  if (info.system === "skin") return "#D9A17C";
+
+  if (info.system === "vessels") {
+    if (key.includes("vein") || key.includes("veine")) {
+      return "#2868C7";
+    }
+    return "#D52F3D";
+  }
+
+  return info.color || "#D87955";
+}
+
+function AnatomyModel({
   sex,
-  layers,
   selected,
-  isolate,
-  onSelect
+  onSelect,
+  visibleSystems,
+  isolated,
 }) {
-
   const { scene } = useGLTF(
     modelUrl(sex),
     false,
     false,
-    (loader) => {
-      loader.setMeshoptDecoder(MeshoptDecoder);
-    }
+    (loader) => loader.setMeshoptDecoder(MeshoptDecoder)
   );
 
   const model = useMemo(() => {
+    const copy = scene.clone(true);
 
-    const cloned = scene.clone(true);
-
-    cloned.traverse((object) => {
-
+    copy.traverse((object) => {
       if (!object.isMesh) return;
 
       const info = ANATOMY_BY_KEY[object.name];
@@ -69,542 +89,562 @@ function HumanBody({
         ? object.material
         : [object.material];
 
-      const coloredMaterials = materials.map((material) => {
-
-        const copy = material.clone();
-
-        if (info.color && copy.color) {
-          copy.color.set(info.color);
-        }
-
-        return copy;
+      const updated = materials.map((original) => {
+        const material = original.clone();
+        material.color.set(getColor(info));
+        material.roughness = 0.75;
+        material.metalness = 0.02;
+        material.transparent = false;
+        material.opacity = 1;
+        return material;
       });
 
       object.material = Array.isArray(object.material)
-        ? coloredMaterials
-        : coloredMaterials[0];
+        ? updated
+        : updated[0];
 
+      object.userData.anatomyKey = info.key;
     });
 
-    return cloned;
-
+    return copy;
   }, [scene]);
 
-
   useEffect(() => {
-
     model.traverse((object) => {
+      if (!object.isMesh) return;
 
-      if (
-        SYSTEMS.some(system => system.id === object.name)
-      ) {
-        object.visible = layers[object.name] !== false;
-      }
+      const info = ANATOMY_BY_KEY[object.name];
+      if (!info) return;
 
-      if (object.isMesh && ANATOMY_BY_KEY[object.name]) {
+      const systemVisible = visibleSystems.includes(info.system);
+      const isolatedVisible = !isolated || info.key === isolated;
 
-        object.visible = isolate && selected
-          ? object.name === selected
-          : true;
+      object.visible = systemVisible && isolatedVisible;
 
-      }
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
 
+      materials.forEach((material) => {
+        if (!material) return;
+
+        if (material.emissive) {
+          material.emissive.set(
+            selected === info.key ? "#287BFF" : "#000000"
+          );
+          material.emissiveIntensity =
+            selected === info.key ? 0.45 : 0;
+        }
+      });
     });
+  }, [model, visibleSystems, selected, isolated]);
 
-  }, [model, layers, selected, isolate]);
+  function handlePointerDown(event) {
+    event.stopPropagation();
 
+    const object = event.object;
+    const key =
+      object?.userData?.anatomyKey || object?.name;
+
+    if (key && ANATOMY_BY_KEY[key]) {
+      onSelect(key);
+    }
+  }
 
   return (
     <primitive
       object={model}
-      onClick={(event) => {
-
-        event.stopPropagation();
-
-        const key = event.object.name;
-
-        if (ANATOMY_BY_KEY[key]) {
-          onSelect(key);
-        }
-
-      }}
+      onPointerDown={handlePointerDown}
     />
   );
 }
 
-
-function Loading() {
+function LoadingModel() {
   return (
     <Html center>
-      <div style={{
-        background: "white",
-        padding: 15,
-        borderRadius: 12,
-        color: "#2563eb",
-        fontWeight: 700
-      }}>
-        Chargement du corps humain...
+      <div style={{ color: "#fff", fontSize: 14 }}>
+        Chargement du modèle...
       </div>
     </Html>
   );
 }
 
-
 export default function Anatomie3D() {
-
   const [sex, setSex] = useState("male");
-
-  const [layers, setLayers] = useState({
-    skin: true,
-    skeleton: true,
-    muscles: true,
-    organs: true,
-    vessels: false,
-    nerves: false
-  });
-
-  const [selected, setSelected] = useState(null);
-
-  const [isolate, setIsolate] = useState(false);
-
+  const [selected, setSelected] = useState("");
   const [search, setSearch] = useState("");
-
-  const availableStructures = useMemo(
-    () => structuresFor(sex),
-    [sex]
+  const [visibleSystems, setVisibleSystems] = useState(
+    SYSTEMS.map((system) => system.id)
   );
+  const [isolated, setIsolated] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [showLayers, setShowLayers] = useState(false);
+  const [showInfo, setShowInfo] = useState(true);
 
-  const filteredStructures = useMemo(() => {
+  const structures = useMemo(() => {
+    return structuresFor(sex) || [];
+  }, [sex]);
 
-    const term = search.trim().toLowerCase();
-
-    if (!term) return availableStructures.slice(0, 40);
-
-    return availableStructures.filter(item =>
-      item.label.toLowerCase().includes(term) ||
-      item.key.toLowerCase().includes(term) ||
-      item.system.toLowerCase().includes(term)
-    ).slice(0, 40);
-
-  }, [availableStructures, search]);
-
-
-  const structure = selected
+  const selectedInfo = selected
     ? ANATOMY_BY_KEY[selected]
     : null;
 
+  const filteredStructures = useMemo(() => {
+    const query = normalize(search.trim());
 
-  function toggleLayer(id) {
+    if (!query) return [];
 
-    setLayers(previous => ({
-      ...previous,
-      [id]: !previous[id]
-    }));
+    return structures
+      .filter((item) => {
+        const text = normalize(
+          `${item.label} ${item.key} ${item.system} ${item.category}`
+        );
 
+        return text.includes(query);
+      })
+      .slice(0, 30);
+  }, [structures, search]);
+
+  function toggleSystem(id) {
+    setVisibleSystems((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
+    );
+
+    setIsolated("");
   }
-
 
   function selectStructure(key) {
-
     setSelected(key);
-    setIsolate(false);
-
+    setIsolated("");
+    setSearch("");
+    setShowSearch(false);
+    setShowInfo(true);
   }
 
+  function resetView() {
+    setSelected("");
+    setIsolated("");
+    setVisibleSystems(SYSTEMS.map((item) => item.id));
+  }
+
+  function isolateStructure() {
+    if (!selectedInfo) return;
+
+    setIsolated((current) =>
+      current === selected ? "" : selected
+    );
+  }
+
+  const pageStyle = {
+    background: "#0B1420",
+    color: "#F8FAFC",
+    minHeight: "100%",
+    width: "100%",
+    overflow: "hidden",
+    fontFamily: "Arial, sans-serif",
+  };
+
+  const buttonStyle = {
+    border: "1px solid #334155",
+    background: "#172536",
+    color: "#F8FAFC",
+    borderRadius: 12,
+    padding: "10px 13px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    fontSize: 13,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  };
 
   return (
+    <div style={pageStyle}>
+      <div
+        style={{
+          padding: "16px 14px 10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 21, fontWeight: 800 }}>
+            Anatomie 3D
+          </div>
+          <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 4 }}>
+            Atlas anatomique interactif
+          </div>
+        </div>
 
-    <div style={{
-      width: "100%",
-      padding: 14,
-      color: "#10243A",
-      boxSizing: "border-box"
-    }}>
-
-      <div style={{
-        marginBottom: 20
-      }}>
-
-        <h1 style={{
-          fontSize: 27,
-          fontWeight: 850,
-          margin: 0
-        }}>
-          Anatomie 3D
-        </h1>
-
-        <p style={{
-          color: "#64748b",
-          fontSize: 14,
-          marginTop: 7
-        }}>
-          Atlas anatomique interactif pour étudiants en médecine.
-        </p>
-
+        <button
+          style={buttonStyle}
+          onClick={() => setShowSearch(!showSearch)}
+        >
+          <Search size={17} />
+          Rechercher
+        </button>
       </div>
 
-
-      {/* SEXE */}
-
-      <div style={{
-        display: "flex",
-        gap: 9,
-        marginBottom: 18
-      }}>
-
-        {[
-          { id: "male", label: "Masculin" },
-          { id: "female", label: "Féminin" }
-        ].map(item => (
-
-          <button
-            key={item.id}
-            onClick={() => {
-              setSex(item.id);
-              setSelected(null);
-              setIsolate(false);
-            }}
+      {showSearch && (
+        <div style={{ padding: "5px 14px 12px" }}>
+          <div
             style={{
-              padding: "11px 18px",
-              borderRadius: 10,
-              border: 0,
-              background: sex === item.id
-                ? "#2563eb"
-                : "#e2e8f0",
-              color: sex === item.id
-                ? "white"
-                : "#10243A",
-              fontWeight: 700
+              display: "flex",
+              alignItems: "center",
+              background: "#172536",
+              border: "1px solid #334155",
+              borderRadius: 12,
+              padding: "0 12px",
             }}
           >
-            {item.label}
-          </button>
+            <Search size={18} color="#94A3B8" />
 
-        ))}
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Ex : cœur, foie, biceps..."
+              autoFocus
+              style={{
+                flex: 1,
+                minWidth: 0,
+                background: "transparent",
+                border: 0,
+                outline: 0,
+                color: "white",
+                padding: 13,
+                fontSize: 14,
+              }}
+            />
 
-      </div>
+            <button
+              onClick={() => {
+                setSearch("");
+                setShowSearch(false);
+              }}
+              style={{
+                border: 0,
+                background: "transparent",
+                color: "#94A3B8",
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
 
+          {search.trim() !== "" && (
+            <div
+              style={{
+                marginTop: 7,
+                background: "#172536",
+                borderRadius: 12,
+                maxHeight: 190,
+                overflowY: "auto",
+              }}
+            >
+              {filteredStructures.length === 0 ? (
+                <div style={{ padding: 14, color: "#94A3B8" }}>
+                  Aucune structure trouvée.
+                </div>
+              ) : (
+                filteredStructures.map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => selectStructure(item.key)}
+                    style={{
+                      width: "100%",
+                      padding: 12,
+                      background: "transparent",
+                      border: 0,
+                      borderBottom: "1px solid #26384B",
+                      color: "white",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600 }}>
+                      {item.label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#94A3B8",
+                        marginTop: 3,
+                      }}
+                    >
+                      {item.system}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* SYSTEMES */}
-
-      <h3 style={{
-        fontSize: 16,
-        fontWeight: 800,
-        marginBottom: 10
-      }}>
-        Systèmes anatomiques
-      </h3>
-
-
-      <div style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 8,
-        marginBottom: 17
-      }}>
-
-        {SYSTEMS.map(system => (
-
-          <button
-            key={system.id}
-            onClick={() => toggleLayer(system.id)}
-            style={{
-              border: `1px solid ${system.color}`,
-              borderRadius: 9,
-              padding: "9px 12px",
-              background: layers[system.id]
-                ? system.color
-                : "white",
-              color: "#10243A",
-              fontWeight: 700,
-              fontSize: 12
-            }}
-          >
-            {layers[system.id] ? "✓ " : ""}
-            {system.label}
-          </button>
-
-        ))}
-
-      </div>
-
-
-      {/* MODELE 3D */}
-
-      <div style={{
-        height: 460,
-        width: "100%",
-        borderRadius: 16,
-        overflow: "hidden",
-        background: "#EAF0F6",
-        border: "1px solid #CBD5E1",
-        position: "relative"
-      }}>
-
-        <Canvas
-          camera={{
-            position: [0, 1, 4],
-            fov: 40
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          padding: "4px 14px 12px",
+          overflowX: "auto",
+        }}
+      >
+        <button
+          style={{
+            ...buttonStyle,
+            background: sex === "male" ? "#2563EB" : "#172536",
+            borderColor: sex === "male" ? "#2563EB" : "#334155",
           }}
-          dpr={[1, 1.25]}
-          gl={{
-            antialias: true,
-            alpha: false
+          onClick={() => {
+            setSex("male");
+            resetView();
           }}
         >
+          Homme
+        </button>
 
-          <color attach="background" args={["#EAF0F6"]} />
+        <button
+          style={{
+            ...buttonStyle,
+            background: sex === "female" ? "#2563EB" : "#172536",
+            borderColor: sex === "female" ? "#2563EB" : "#334155",
+          }}
+          onClick={() => {
+            setSex("female");
+            resetView();
+          }}
+        >
+          Femme
+        </button>
 
-          <ambientLight intensity={1.8} />
+        <button
+          style={buttonStyle}
+          onClick={() => setShowLayers(!showLayers)}
+        >
+          <Layers size={16} />
+          Systèmes
+          <ChevronDown size={14} />
+        </button>
 
+        <button style={buttonStyle} onClick={resetView}>
+          <RotateCcw size={16} />
+        </button>
+      </div>
+
+      {showLayers && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            padding: "0 14px 12px",
+          }}
+        >
+          {SYSTEMS.map((system) => {
+            const active = visibleSystems.includes(system.id);
+
+            return (
+              <button
+                key={system.id}
+                onClick={() => toggleSystem(system.id)}
+                style={{
+                  ...buttonStyle,
+                  background: active ? "#24364A" : "#111C29",
+                  borderColor: active ? system.color : "#334155",
+                  opacity: active ? 1 : 0.55,
+                }}
+              >
+                <span
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: "50%",
+                    background: system.color,
+                  }}
+                />
+                {system.label}
+                {active ? <Eye size={14} /> : <EyeOff size={14} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div
+        style={{
+          position: "relative",
+          height: "min(66vh, 650px)",
+          minHeight: 390,
+          background:
+            "radial-gradient(circle at 50% 42%, #26394B 0%, #101D2B 55%, #0B1420 100%)",
+        }}
+      >
+        <Canvas
+          camera={{ position: [0, 0, 4.5], fov: 38 }}
+          dpr={[1, 1.7]}
+          gl={{ antialias: true, alpha: true }}
+        >
+          <ambientLight intensity={1.1} />
           <directionalLight
             position={[4, 6, 5]}
             intensity={2}
           />
-
           <directionalLight
             position={[-4, 2, -3]}
             intensity={0.8}
           />
 
-          <Suspense fallback={<Loading />}>
-
-            <HumanBody
+          <Suspense fallback={<LoadingModel />}>
+            <AnatomyModel
               sex={sex}
-              layers={layers}
               selected={selected}
-              isolate={isolate}
               onSelect={selectStructure}
+              visibleSystems={visibleSystems}
+              isolated={isolated}
             />
-
           </Suspense>
 
           <OrbitControls
-            target={[0, 0.9, 0]}
-            enablePan
+            enablePan={false}
             enableZoom
-            minDistance={1.5}
-            maxDistance={8}
+            minDistance={2}
+            maxDistance={9}
+            rotateSpeed={0.8}
+            zoomSpeed={0.8}
           />
-
         </Canvas>
 
-
-        <div style={{
-          position: "absolute",
-          bottom: 10,
-          left: 10,
-          background: "rgba(255,255,255,0.9)",
-          padding: "7px 10px",
-          borderRadius: 8,
-          fontSize: 11,
-          color: "#475569"
-        }}>
-          Fais glisser pour tourner • Pince pour zoomer
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <button
+            onClick={() => setShowInfo(!showInfo)}
+            style={{
+              ...buttonStyle,
+              width: 43,
+              height: 43,
+              padding: 0,
+            }}
+            title="Informations"
+          >
+            <Info size={19} />
+          </button>
         </div>
 
-      </div>
+        {selectedInfo && showInfo && (
+          <div
+            style={{
+              position: "absolute",
+              left: 12,
+              right: 12,
+              bottom: 12,
+              background: "rgba(15, 29, 44, 0.96)",
+              border: "1px solid #3B5269",
+              borderRadius: 17,
+              padding: 15,
+              boxShadow: "0 8px 30px #0008",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    color: "#60A5FA",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Structure sélectionnée
+                </div>
 
+                <div
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 800,
+                    marginTop: 5,
+                  }}
+                >
+                  {selectedInfo.label}
+                </div>
 
-      {/* STRUCTURE SELECTIONNEE */}
-
-      <div style={{
-        marginTop: 17,
-        padding: 16,
-        background: "white",
-        border: "1px solid #E2E8F0",
-        borderRadius: 13
-      }}>
-
-        <h3 style={{
-          fontWeight: 800,
-          marginTop: 0
-        }}>
-          Structure sélectionnée
-        </h3>
-
-
-        {structure ? (
-
-          <>
-
-            <div style={{
-              fontSize: 22,
-              fontWeight: 850,
-              color: "#2563eb",
-              marginBottom: 10
-            }}>
-              {structure.label}
-            </div>
-
-            <p>
-              <strong>Système :</strong> {structure.system}
-            </p>
-
-            <p>
-              <strong>Catégorie :</strong> {structure.category}
-            </p>
-
-            <div style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              marginTop: 13
-            }}>
-
-              <button
-                onClick={() => setIsolate(true)}
-                style={{
-                  padding: "10px 13px",
-                  border: 0,
-                  borderRadius: 9,
-                  background: "#2563eb",
-                  color: "white",
-                  fontWeight: 700
-                }}
-              >
-                Isoler cette structure
-              </button>
+                <div
+                  style={{
+                    color: "#A8B7C8",
+                    fontSize: 12,
+                    marginTop: 5,
+                  }}
+                >
+                  {selectedInfo.system} · {selectedInfo.category}
+                </div>
+              </div>
 
               <button
                 onClick={() => {
-                  setIsolate(false);
-                  setSelected(null);
+                  setSelected("");
+                  setIsolated("");
                 }}
                 style={{
-                  padding: "10px 13px",
                   border: 0,
-                  borderRadius: 9,
-                  background: "#e2e8f0",
-                  color: "#10243A",
-                  fontWeight: 700
+                  background: "transparent",
+                  color: "#94A3B8",
+                  alignSelf: "flex-start",
                 }}
               >
-                Tout afficher
+                <X size={20} />
               </button>
-
             </div>
 
-          </>
-
-        ) : (
-
-          <p style={{
-            color: "#64748b",
-            fontSize: 13
-          }}>
-            Clique directement sur une structure du corps
-            ou recherche un organe ci-dessous.
-          </p>
-
-        )}
-
-      </div>
-
-
-      {/* RECHERCHE */}
-
-      <div style={{
-        marginTop: 20
-      }}>
-
-        <h3 style={{
-          fontWeight: 800
-        }}>
-          Explorer les structures
-        </h3>
-
-        <input
-          type="search"
-          value={search}
-          onChange={event => setSearch(event.target.value)}
-          placeholder="Rechercher : cœur, foie, cerveau..."
-          style={{
-            width: "100%",
-            boxSizing: "border-box",
-            padding: 13,
-            borderRadius: 10,
-            border: "1px solid #CBD5E1",
-            outline: "none",
-            fontSize: 14,
-            marginBottom: 12
-          }}
-        />
-
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: 8,
-          maxHeight: 320,
-          overflowY: "auto"
-        }}>
-
-          {filteredStructures.map(item => (
-
             <button
-              key={item.key}
-              onClick={() => selectStructure(item.key)}
+              onClick={isolateStructure}
               style={{
-                textAlign: "left",
-                padding: 11,
-                borderRadius: 9,
-                border: selected === item.key
-                  ? "2px solid #2563eb"
-                  : "1px solid #E2E8F0",
-                background: selected === item.key
-                  ? "#EFF6FF"
-                  : "white",
-                color: "#10243A",
-                fontWeight: 650,
-                fontSize: 12
+                ...buttonStyle,
+                width: "100%",
+                marginTop: 13,
+                background: isolated === selected ? "#2563EB" : "#263B52",
               }}
             >
-              {item.label}
+              {isolated === selected
+                ? "Afficher toutes les structures"
+                : "Isoler cette structure"}
             </button>
-
-          ))}
-
-        </div>
-
-        {filteredStructures.length === 0 && (
-
-          <p style={{
-            color: "#64748b",
-            fontSize: 13
-          }}>
-            Aucune structure trouvée.
-          </p>
-
+          </div>
         )}
-
       </div>
 
-
-      {/* ATTRIBUTION */}
-
-      <div style={{
-        marginTop: 20,
-        padding: 12,
-        background: "#F1F5F9",
-        borderRadius: 10,
-        color: "#64748b",
-        fontSize: 10,
-        lineHeight: 1.6
-      }}>
-
-        {ATTRIBUTION}
-
-        <p>
-          Modèle pédagogique destiné à l'apprentissage
-          et à la visualisation anatomique. Ne constitue
-          pas un dispositif médical.
-        </p>
-
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 16,
+          padding: "12px 8px 16px",
+          color: "#94A3B8",
+          fontSize: 11,
+          flexWrap: "wrap",
+        }}
+      >
+        <span>Un doigt : tourner</span>
+        <span>Deux doigts : zoomer</span>
+        <span>Toucher : sélectionner</span>
       </div>
-
     </div>
-
   );
-
-            }
+}
