@@ -1786,6 +1786,13 @@ const response = await fetch("/api/ia", {
 {active === "patient" && (
   <PatientVirtuel />
 )}
+{active === "patient" && (
+  <PatientVirtuel />
+)}
+
+{active === "anatomie" && (
+  <Anatomie3D />
+)}
 
             {/* =========================================
                 MES COURS
