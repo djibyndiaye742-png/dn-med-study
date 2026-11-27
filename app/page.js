@@ -1776,6 +1776,9 @@ const response = await fetch("/api/ia", {
                 </section>
               </>
             )}
+{active === "patient" && (
+  <PatientVirtuel />
+)}
 
             {/* =========================================
                 MES COURS
