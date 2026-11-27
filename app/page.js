@@ -2868,6 +2868,7 @@ const response = await fetch("/api/ia", {
             { id: "courses", label: "Cours", icon: BookOpen },
             { id: "ai", label: "Assistant", icon: Sparkles },
             { id: "patient", label: "Patient", icon: Stethoscope },
+            { id: "anatomie", label: "Anatomie 3D", icon: Activity },
             { id: "exams", label: "Examens", icon: ClipboardList },
             { id: "settings", label: "Compte", icon: UserRound }
           ].map(item => {
