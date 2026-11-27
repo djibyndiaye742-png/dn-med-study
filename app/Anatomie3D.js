@@ -9,7 +9,7 @@ import React, {
 } from "react";
 
 import * as THREE from "three";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 
 import {
@@ -108,7 +108,10 @@ async function loadAtlas() {
 
   const atlas = await response.json();
 
-  if (!Array.isArray(atlas.parts) || !Array.isArray(atlas.chunks)) {
+  if (
+    !Array.isArray(atlas.parts) ||
+    !Array.isArray(atlas.chunks)
+  ) {
     throw new Error("Le manifeste anatomique est invalide.");
   }
 
@@ -227,7 +230,7 @@ async function loadAtlas() {
       baseMaterial: material,
     };
 
-    // Tous les systèmes sont cachés au départ.
+    // Toutes les structures sont cachées au départ.
     mesh.visible = false;
 
     root.add(mesh);
@@ -250,7 +253,8 @@ async function loadAtlas() {
     size.z
   );
 
-  const scale = maxDimension > 0 ? 2.7 / maxDimension : 1;
+  const scale =
+    maxDimension > 0 ? 2.7 / maxDimension : 1;
 
   root.scale.setScalar(scale);
 
@@ -264,7 +268,7 @@ async function loadAtlas() {
 }
 
 /* =========================================================
-   SCÈNE 3D
+   SCÈNE 3D — SÉLECTION ANATOMIQUE CORRIGÉE
 ========================================================= */
 
 function AnatomicalScene({
@@ -275,7 +279,12 @@ function AnatomicalScene({
   onSelect,
   controlsRef,
 }) {
-  const groupRef = useRef(null);
+  const { camera, gl } = useThree();
+
+  const raycaster = useMemo(
+    () => new THREE.Raycaster(),
+    []
+  );
 
   // Visibilité des systèmes
   useEffect(() => {
@@ -286,17 +295,27 @@ function AnatomicalScene({
 
       const system = object.userData.system;
 
-      const systemVisible = visibleSystems.includes(system);
+      const systemVisible =
+        visibleSystems.includes(system);
+
+      const objectKey =
+        object.userData.conceptId ??
+        object.userData.id;
 
       const selected =
-        selectedConcept &&
-        object.userData.conceptId === selectedConcept;
+        selectedConcept != null &&
+        objectKey === selectedConcept;
 
       object.visible =
         systemVisible &&
         (!isolate || !selectedConcept || selected);
     });
-  }, [model, visibleSystems, selectedConcept, isolate]);
+  }, [
+    model,
+    visibleSystems,
+    selectedConcept,
+    isolate,
+  ]);
 
   // Mise en évidence de la structure sélectionnée
   useEffect(() => {
@@ -305,43 +324,181 @@ function AnatomicalScene({
     model.root.traverse((object) => {
       if (!object.isMesh) return;
 
-      const baseMaterial = object.userData.baseMaterial;
+      const baseMaterial =
+        object.userData.baseMaterial;
 
       if (!baseMaterial) return;
 
-      // Restaurer la couleur originale
+      // Restaurer le matériau original
       if (object.material !== baseMaterial) {
         object.material.dispose();
         object.material = baseMaterial;
       }
 
-      // Mettre en évidence uniquement le concept sélectionné
+      const objectKey =
+        object.userData.conceptId ??
+        object.userData.id;
+
+      // Mettre en évidence la structure sélectionnée
       if (
-        selectedConcept &&
-        object.userData.conceptId === selectedConcept
+        selectedConcept != null &&
+        objectKey === selectedConcept
       ) {
         const highlighted = baseMaterial.clone();
 
-        highlighted.emissive = new THREE.Color("#00C8FF");
+        highlighted.emissive = new THREE.Color(
+          "#00C8FF"
+        );
+
         highlighted.emissiveIntensity = 0.55;
 
-        highlighted.color = baseMaterial.color.clone();
+        highlighted.color =
+          baseMaterial.color.clone();
 
         object.material = highlighted;
       }
     });
   }, [model, selectedConcept]);
 
-  const handlePointerDown = useCallback(
-    (event) => {
-      if (!event.object?.userData?.id) return;
+  /* -------------------------------------------------------
+     DÉTECTION DIRECTE DES STRUCTURES PAR RAYCASTING
+  ------------------------------------------------------- */
 
-      event.stopPropagation();
+  useEffect(() => {
+    if (!model) return;
 
-      onSelect(event.object.userData);
-    },
-    [onSelect]
-  );
+    const canvas = gl.domElement;
+
+    let startPointer = null;
+
+    const handlePointerDown = (event) => {
+      startPointer = {
+        x: event.clientX,
+        y: event.clientY,
+        id: event.pointerId,
+      };
+    };
+
+    const handlePointerCancel = () => {
+      startPointer = null;
+    };
+
+    const handlePointerUp = (event) => {
+      if (
+        !startPointer ||
+        startPointer.id !== event.pointerId
+      ) {
+        startPointer = null;
+        return;
+      }
+
+      const distance = Math.hypot(
+        event.clientX - startPointer.x,
+        event.clientY - startPointer.y
+      );
+
+      startPointer = null;
+
+      // Ne pas sélectionner pendant une rotation.
+      if (distance > 8) return;
+
+      const rect = canvas.getBoundingClientRect();
+
+      if (!rect.width || !rect.height) return;
+
+      const pointer = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) *
+          2 -
+          1,
+        -(
+          ((event.clientY - rect.top) / rect.height) *
+            2 -
+          1
+        )
+      );
+
+      camera.updateMatrixWorld(true);
+      model.root.updateMatrixWorld(true);
+
+      raycaster.setFromCamera(pointer, camera);
+
+      const intersections =
+        raycaster.intersectObjects(
+          model.root.children,
+          true
+        );
+
+      // Vérifier la visibilité de la structure
+      // ainsi que celle de ses parents.
+      const isVisible = (object) => {
+        let current = object;
+
+        while (current) {
+          if (!current.visible) return false;
+
+          if (current === model.root) break;
+
+          current = current.parent;
+        }
+
+        return true;
+      };
+
+      // Prendre la première structure réellement
+      // sélectionnable parmi les intersections.
+      const hit = intersections.find(
+        ({ object }) => {
+          return (
+            object.isMesh &&
+            object.userData?.id != null &&
+            isVisible(object)
+          );
+        }
+      );
+
+      if (!hit) return;
+
+      onSelect(hit.object.userData);
+    };
+
+    canvas.addEventListener(
+      "pointerdown",
+      handlePointerDown
+    );
+
+    canvas.addEventListener(
+      "pointerup",
+      handlePointerUp
+    );
+
+    canvas.addEventListener(
+      "pointercancel",
+      handlePointerCancel
+    );
+
+    return () => {
+      canvas.removeEventListener(
+        "pointerdown",
+        handlePointerDown
+      );
+
+      canvas.removeEventListener(
+        "pointerup",
+        handlePointerUp
+      );
+
+      canvas.removeEventListener(
+        "pointercancel",
+        handlePointerCancel
+      );
+    };
+  }, [
+    model,
+    gl,
+    camera,
+    raycaster,
+    onSelect,
+  ]);
 
   if (!model) return null;
 
@@ -364,11 +521,7 @@ function AnatomicalScene({
         intensity={0.5}
       />
 
-      <primitive
-        ref={groupRef}
-        object={model.root}
-        onPointerDown={handlePointerDown}
-      />
+      <primitive object={model.root} />
 
       <OrbitControls
         ref={controlsRef}
@@ -467,7 +620,9 @@ export default function Anatomie3D() {
   const toggleSystem = useCallback((systemId) => {
     setVisibleSystems((previous) => {
       if (previous.includes(systemId)) {
-        return previous.filter((item) => item !== systemId);
+        return previous.filter(
+          (item) => item !== systemId
+        );
       }
 
       return [...previous, systemId];
@@ -556,7 +711,8 @@ export default function Anatomie3D() {
   /* Libellé du système sélectionné */
 
   const selectedSystem = selected
-    ? SYSTEMS[selected.system]?.name || selected.system
+    ? SYSTEMS[selected.system]?.name ||
+      selected.system
     : "";
 
   /* =====================================================
@@ -666,7 +822,8 @@ export default function Anatomie3D() {
                   border: "4px solid #42546B",
                   borderTopColor: "#06B6D4",
                   borderRadius: "50%",
-                  animation: "dnSpin 1s linear infinite",
+                  animation:
+                    "dnSpin 1s linear infinite",
                 }}
               />
 
@@ -700,7 +857,9 @@ export default function Anatomie3D() {
               }}
             >
               <div>
-                <strong>Erreur de chargement</strong>
+                <strong>
+                  Erreur de chargement
+                </strong>
 
                 <p style={{ fontSize: "13px" }}>
                   {error}
@@ -713,7 +872,8 @@ export default function Anatomie3D() {
                   }}
                 >
                   Vérifie la présence de atlas.json et
-                  des fichiers body-*.bin dans public/models/.
+                  des fichiers body-*.bin dans
+                  public/models/.
                 </p>
               </div>
             </div>
@@ -735,15 +895,21 @@ export default function Anatomie3D() {
               style={{
                 width: "100%",
                 height: "100%",
+                touchAction: "none",
               }}
             >
-              <color attach="background" args={[BACKGROUND]} />
+              <color
+                attach="background"
+                args={[BACKGROUND]}
+              />
 
               <AnatomicalScene
                 model={model}
                 visibleSystems={visibleSystems}
                 selectedConcept={
-                  selected?.conceptId || null
+                  selected?.conceptId ??
+                  selected?.id ??
+                  null
                 }
                 isolate={isolate}
                 onSelect={handleSelect}
@@ -792,23 +958,26 @@ export default function Anatomie3D() {
 
           {/* INDICATION */}
 
-          {!loading && !error && visibleSystems.length === 0 && (
-            <div
-              style={{
-                position: "absolute",
-                left: "12px",
-                bottom: "15px",
-                padding: "9px 12px",
-                borderRadius: "9px",
-                background: "#203248",
-                color: "#DCE7F2",
-                fontSize: "11px",
-                zIndex: 3,
-              }}
-            >
-              Active un système pour afficher les structures.
-            </div>
-          )}
+          {!loading &&
+            !error &&
+            visibleSystems.length === 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: "12px",
+                  bottom: "15px",
+                  padding: "9px 12px",
+                  borderRadius: "9px",
+                  background: "#203248",
+                  color: "#DCE7F2",
+                  fontSize: "11px",
+                  zIndex: 3,
+                }}
+              >
+                Active un système pour afficher les
+                structures.
+              </div>
+            )}
         </div>
 
         {/* PANNEAUX */}
@@ -895,54 +1064,62 @@ export default function Anatomie3D() {
                 gap: "8px",
               }}
             >
-              {Object.entries(SYSTEMS).map(([id, system]) => {
-                const active = visibleSystems.includes(id);
+              {Object.entries(SYSTEMS).map(
+                ([id, system]) => {
+                  const active =
+                    visibleSystems.includes(id);
 
-                return (
-                  <button
-                    key={id}
-                    onClick={() => toggleSystem(id)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      textAlign: "left",
-                      padding: "10px",
-                      borderRadius: "9px",
-                      border: active
-                        ? "1px solid #2563EB"
-                        : "1px solid #E2E8F0",
-                      background: active
-                        ? "#EFF6FF"
-                        : "#FFFFFF",
-                      color: "#26364A",
-                      cursor: "pointer",
-                      fontSize: "11px",
-                      fontWeight: active ? "700" : "500",
-                    }}
-                  >
-                    <span
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => toggleSystem(id)}
                       style={{
-                        width: "11px",
-                        height: "11px",
-                        flexShrink: 0,
-                        borderRadius: "50%",
-                        background: system.color,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        textAlign: "left",
+                        padding: "10px",
+                        borderRadius: "9px",
+                        border: active
+                          ? "1px solid #2563EB"
+                          : "1px solid #E2E8F0",
+                        background: active
+                          ? "#EFF6FF"
+                          : "#FFFFFF",
+                        color: "#26364A",
+                        cursor: "pointer",
+                        fontSize: "11px",
+                        fontWeight: active
+                          ? "700"
+                          : "500",
                       }}
-                    />
+                    >
+                      <span
+                        style={{
+                          width: "11px",
+                          height: "11px",
+                          flexShrink: 0,
+                          borderRadius: "50%",
+                          background: system.color,
+                        }}
+                      />
 
-                    <span style={{ flex: 1 }}>
-                      {system.name}
-                    </span>
+                      <span style={{ flex: 1 }}>
+                        {system.name}
+                      </span>
 
-                    {active ? (
-                      <Eye size={14} />
-                    ) : (
-                      <EyeOff size={14} color="#A0AEC0" />
-                    )}
-                  </button>
-                );
-              })}
+                      {active ? (
+                        <Eye size={14} />
+                      ) : (
+                        <EyeOff
+                          size={14}
+                          color="#A0AEC0"
+                        />
+                      )}
+                    </button>
+                  );
+                }
+              )}
             </div>
           </section>
 
@@ -955,7 +1132,8 @@ export default function Anatomie3D() {
                 padding: "15px",
                 borderRadius: "12px",
                 border: "1px solid #D7E5F4",
-                boxShadow: "0 3px 12px rgba(20,40,70,0.04)",
+                boxShadow:
+                  "0 3px 12px rgba(20,40,70,0.04)",
               }}
             >
               <div
@@ -1077,11 +1255,12 @@ export default function Anatomie3D() {
                   margin: "7px 0 0",
                 }}
               >
-                Active un ou plusieurs systèmes anatomiques.
-                Touche ensuite une structure du modèle pour
-                afficher son nom et ses informations disponibles.
-                Fais glisser ton doigt pour tourner le corps et
-                utilise deux doigts pour zoomer.
+                Active un ou plusieurs systèmes
+                anatomiques. Touche ensuite une structure
+                du modèle pour afficher son nom et ses
+                informations disponibles. Fais glisser
+                ton doigt pour tourner le corps et utilise
+                deux doigts pour zoomer.
               </p>
             </section>
           )}
