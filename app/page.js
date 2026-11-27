@@ -1,6 +1,12 @@
 "use client";
 import dynamic from "next/dynamic";
 
+const Anatomie3D = dynamic(
+  () => import("./Anatomie3D"),
+  { ssr: false }
+);
+import dynamic from "next/dynamic";
+
 import { useEffect, useMemo, useState } from "react";
 
 import {
