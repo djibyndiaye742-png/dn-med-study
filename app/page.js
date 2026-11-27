@@ -8,8 +8,7 @@ const Anatomie3D = dynamic(
 
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  Home, BookOpen, Brain, ClipboardList, Sparkles,
+import {Activity, Home, BookOpen, Brain, ClipboardList, Sparkles,
   GraduationCap, Layers, FileText, Search, Plus, X,
   Menu, ChevronRight, ArrowLeft, Upload, ExternalLink,
   Trash2, Clock, FolderOpen, FilePlus2, Settings,
@@ -17,15 +16,6 @@ import {
   BookMarked, RefreshCw, Stethoscope, ShieldCheck,
   History, Bookmark, FileCheck, Eye, CheckCircle2
 } from "lucide-react";
-import {
-  Activity,
-  Home,
-  BookOpen,
-  Brain,
-  ClipboardList,
-  // conserve tous les autres imports
-} from "lucide-react";
-
 import { supabase } from "../lib/supabase";
 import PatientVirtuel from "./PatientVirtuel";
 
