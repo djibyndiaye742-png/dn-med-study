@@ -11,8 +11,7 @@ import React, {
 import * as THREE from "three";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { supabase } from "../lib/supabase";
 
 import {
   Eye,
@@ -26,8 +25,6 @@ import {
 
 /* =========================================================
    HUMAN ATLAS — DN MED STUDY
-   Source : BodyParts3D 4.0
-   2 234 maillages anatomiques
 ========================================================= */
 
 const SYSTEMS = {
@@ -273,8 +270,6 @@ function AnatomicalScene({
     });
   }, [model, selectedConcept]);
 
-  /* DÉTECTION DES STRUCTURES PAR RAYCASTING */
-
   useEffect(() => {
     if (!model) return;
 
@@ -411,7 +406,7 @@ function AnatomicalScene({
 ========================================================= */
 
 export default function Anatomie3D() {
-  /* AUTHENTIFICATION */
+  /* AUTHENTIFICATION SUPABASE */
 
   const [authChecked, setAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -428,27 +423,84 @@ export default function Anatomie3D() {
   const controlsRef = useRef(null);
 
   /* =====================================================
-     VÉRIFICATION FIREBASE
-     Un étudiant non connecté est redirigé vers /connexion.
+     RESTAURATION ET SURVEILLANCE DE LA SESSION SUPABASE
+
+     On attend la session existante avant de rediriger.
+     Une session valide donne directement accès à l'Atlas.
   ===================================================== */
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
+    let active = true;
+    let redirectStarted = false;
+
+    const redirectToLogin = () => {
+      if (!active || redirectStarted) return;
+
+      redirectStarted = true;
+      window.location.replace("/connexion");
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+
+      if (session?.user) {
+        redirectStarted = false;
         setIsAuthenticated(true);
         setAuthChecked(true);
-      } else {
+        return;
+      }
+
+      if (event === "INITIAL_SESSION" || event === "SIGNED_OUT") {
         setIsAuthenticated(false);
         setAuthChecked(true);
-        window.location.replace("/connexion");
+        redirectToLogin();
       }
     });
 
-    return () => unsubscribe();
+    // Vérification explicite de la session déjà enregistrée.
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (!active) return;
+
+        if (error) {
+          console.error("Erreur de session Supabase :", error);
+          setIsAuthenticated(false);
+          setAuthChecked(true);
+          redirectToLogin();
+          return;
+        }
+
+        if (data.session?.user) {
+          redirectStarted = false;
+          setIsAuthenticated(true);
+          setAuthChecked(true);
+        } else {
+          setIsAuthenticated(false);
+          setAuthChecked(true);
+          redirectToLogin();
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+
+        console.error("Impossible de vérifier la session :", error);
+
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+        redirectToLogin();
+      });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   /* =====================================================
-     CHARGEMENT DU MODÈLE UNIQUEMENT APRÈS CONNEXION
+     CHARGEMENT DE L'ATLAS APRÈS AUTHENTIFICATION
   ===================================================== */
 
   useEffect(() => {
@@ -592,9 +644,7 @@ export default function Anatomie3D() {
     ? SYSTEMS[selected.system]?.name || selected.system
     : "";
 
-  /* =====================================================
-     ÉCRAN D'ATTENTE : VÉRIFICATION DE CONNEXION
-  ===================================================== */
+  /* ATTENTE DE LA VÉRIFICATION DE SESSION */
 
   if (!authChecked || !isAuthenticated) {
     return (
@@ -841,7 +891,7 @@ export default function Anatomie3D() {
             </Canvas>
           )}
 
-          {/* FENÊTRE FLOTTANTE DE LA STRUCTURE SÉLECTIONNÉE */}
+          {/* STRUCTURE SÉLECTIONNÉE */}
 
           {selected && showInfo && (
             <div
@@ -1017,8 +1067,6 @@ export default function Anatomie3D() {
               <Info size={19} />
             </button>
           </div>
-
-          {/* INDICATION */}
 
           {!loading &&
             !error &&
