@@ -12,7 +12,7 @@ const CASES = [
     id: "abdomen",
     title: "Douleur abdominale",
     level: "Débutant",
-    description: "Un patient consulte pour une douleur abdominale.",
+    description: "Exploration d'une douleur abdominale.",
     patient: "Mamadou, 24 ans",
     complaint: "Bonjour docteur. J'ai mal au ventre depuis ce matin."
   },
@@ -20,7 +20,7 @@ const CASES = [
     id: "respiration",
     title: "Difficulté respiratoire",
     level: "Intermédiaire",
-    description: "Un patient présente une gêne respiratoire.",
+    description: "Exploration d'une dyspnée.",
     patient: "Aminata, 32 ans",
     complaint: "Docteur, j'ai du mal à respirer depuis hier soir."
   },
@@ -28,9 +28,145 @@ const CASES = [
     id: "fievre",
     title: "Fièvre et frissons",
     level: "Débutant",
-    description: "Un patient consulte pour une fièvre persistante.",
+    description: "Patient présentant un syndrome fébrile.",
     patient: "Ibrahima, 28 ans",
     complaint: "J'ai de la fièvre et des frissons depuis deux jours."
+  },
+  {
+    id: "thorax",
+    title: "Douleur thoracique",
+    level: "Intermédiaire",
+    description: "Exploration d'une douleur dans la poitrine.",
+    patient: "Ousmane, 55 ans",
+    complaint: "J'ai une douleur dans la poitrine depuis ce matin."
+  },
+  {
+    id: "palpitations",
+    title: "Palpitations",
+    level: "Intermédiaire",
+    description: "Patient présentant des palpitations.",
+    patient: "Fatou, 26 ans",
+    complaint: "Mon cœur bat parfois très rapidement."
+  },
+  {
+    id: "asthme",
+    title: "Crise d'asthme",
+    level: "Intermédiaire",
+    description: "Exploration d'une gêne respiratoire sifflante.",
+    patient: "Moussa, 19 ans",
+    complaint: "Je siffle quand je respire et j'ai du mal à reprendre mon souffle."
+  },
+  {
+    id: "toux",
+    title: "Toux persistante",
+    level: "Débutant",
+    description: "Patient consultant pour une toux prolongée.",
+    patient: "Awa, 38 ans",
+    complaint: "Je tousse beaucoup depuis plusieurs semaines."
+  },
+  {
+    id: "diarrhee",
+    title: "Diarrhée aiguë",
+    level: "Débutant",
+    description: "Exploration d'un épisode diarrhéique.",
+    patient: "Cheikh, 21 ans",
+    complaint: "J'ai la diarrhée depuis hier."
+  },
+  {
+    id: "vomissements",
+    title: "Vomissements",
+    level: "Débutant",
+    description: "Patient présentant des vomissements.",
+    patient: "Mariama, 30 ans",
+    complaint: "Je vomis depuis cette nuit."
+  },
+  {
+    id: "paludisme",
+    title: "Suspicion de paludisme",
+    level: "Intermédiaire",
+    description: "Patient présentant fièvre et céphalées.",
+    patient: "Abdou, 23 ans",
+    complaint: "J'ai de la fièvre, des maux de tête et des courbatures."
+  },
+  {
+    id: "cephalees",
+    title: "Céphalées",
+    level: "Débutant",
+    description: "Exploration de maux de tête.",
+    patient: "Khadija, 27 ans",
+    complaint: "J'ai très mal à la tête depuis hier."
+  },
+  {
+    id: "convulsions",
+    title: "Convulsions",
+    level: "Avancé",
+    description: "Exploration d'un épisode convulsif.",
+    patient: "Boubacar, 22 ans",
+    complaint: "On m'a amené ici après une crise avec des secousses."
+  },
+  {
+    id: "deficit",
+    title: "Déficit moteur",
+    level: "Avancé",
+    description: "Patient présentant une faiblesse d'un côté du corps.",
+    patient: "Amadou, 64 ans",
+    complaint: "Depuis ce matin, mon bras et ma jambe droits sont faibles."
+  },
+  {
+    id: "enfant_fievre",
+    title: "Fièvre chez l'enfant",
+    level: "Débutant",
+    description: "Consultation pédiatrique.",
+    patient: "Mère de Lamine, enfant de 3 ans",
+    complaint: "Docteur, mon enfant a de la fièvre depuis hier."
+  },
+  {
+    id: "dehydration",
+    title: "Déshydratation",
+    level: "Intermédiaire",
+    description: "Évaluation d'une possible déshydratation.",
+    patient: "Seynabou, 5 ans",
+    complaint: "Ma fille est très fatiguée et refuse de boire."
+  },
+  {
+    id: "douleur_pelvienne",
+    title: "Douleur pelvienne",
+    level: "Intermédiaire",
+    description: "Consultation gynécologique.",
+    patient: "Ndeye, 25 ans",
+    complaint: "J'ai mal dans le bas du ventre."
+  },
+  {
+    id: "saignement",
+    title: "Saignement gynécologique",
+    level: "Avancé",
+    description: "Exploration d'un saignement inhabituel.",
+    patient: "Aïssatou, 29 ans",
+    complaint: "J'ai des saignements alors que je ne devrais pas avoir mes règles."
+  },
+  {
+    id: "traumatisme",
+    title: "Traumatisme",
+    level: "Intermédiaire",
+    description: "Patient après un accident.",
+    patient: "Modou, 31 ans",
+    complaint: "J'ai eu un accident de moto et j'ai mal à la jambe."
+  },
+  {
+    id: "hemorragie",
+    title: "Hémorragie",
+    level: "Avancé",
+    description: "Évaluation d'un saignement important.",
+    patient: "Ibrahima, 42 ans",
+    complaint: "Je saigne beaucoup depuis une blessure."
+  },
+  {
+    id: "syncope",
+    title: "Perte de connaissance",
+    level: "Avancé",
+    description: "Exploration d'un malaise avec perte de connaissance.",
+    patient: "Moussa, 48 ans",
+    complaint: "J'ai perdu connaissance quelques instants hier."
   }
 ];
 
