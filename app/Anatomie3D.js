@@ -1,9 +1,33 @@
 "use client";
+import * as THREE from "three";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, Html, useGLTF } from "@react-three/drei";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { MeshoptDecoder } from "meshoptimizer";
+
+import {
+  Search,
+  Bone,
+  Activity,
+  Eye,
+  EyeOff,
+  ZoomIn,
+  ZoomOut,
+  X,
+  Info,
+  Scan,
+  User,
+  Layers,
+  ChevronDown,
+} from "lucide-react";
 
 import {
   modelUrl,
@@ -12,164 +36,148 @@ import {
   ATTRIBUTION,
 } from "open-anatomy-3d";
 
-import {
-  Search,
-  RotateCcw,
-  X,
-  Eye,
-  EyeOff,
-  ChevronDown,
-  Info,
-  Layers,
-  Scan,
-} from "lucide-react";
-
-/* =========================
-   SYSTÈMES ANATOMIQUES
-========================= */
 
 const SYSTEMS = [
-  { id: "skin", label: "Peau", color: "#D9A17C" },
-  { id: "skeleton", label: "Squelette", color: "#E9DCC1" },
-  { id: "muscles", label: "Muscles", color: "#A83232" },
-  { id: "organs", label: "Organes", color: "#D87955" },
-  { id: "vessels", label: "Vaisseaux", color: "#D52F3D" },
-  { id: "nerves", label: "Nerfs", color: "#E8C84A" },
+  { id: "skin", name: "Peau", color: "#e5a17b" },
+  { id: "skeleton", name: "Squelette", color: "#f0dfb7" },
+  { id: "muscles", name: "Muscles", color: "#d95c62" },
+  { id: "organs", name: "Organes", color: "#d97945" },
+  { id: "vessels", name: "Vaisseaux", color: "#d94b55" },
+  { id: "nerves", name: "Nerfs", color: "#e8c34d" },
 ];
 
-const SYSTEM_IDS = SYSTEMS.map((s) => s.id);
+const INITIAL_SYSTEMS = [
+  "skeleton",
+  "muscles",
+  "organs",
+  "vessels",
+  "nerves",
+];
 
-const normalize = (value = "") =>
-  String(value)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-
-/* =========================
-   INFORMATIONS DES STRUCTURES
-========================= */
-
-function getStructureInfo(object) {
-  if (!object) return null;
+const getName = (info) => {
+  if (!info) return "Structure anatomique";
 
   return (
-    ANATOMY_BY_KEY[object.name] ||
-    null
+    info.nameFr ||
+    info.frenchName ||
+    info.labelFr ||
+    info.name ||
+    info.label ||
+    info.key ||
+    "Structure anatomique"
   );
-}
+};
 
-function getStructureColor(info) {
-  if (!info) return "#B8C2CC";
+const getDescription = (info) => {
+  if (!info) return "";
 
-  const system = info.system;
+  return (
+    info.descriptionFr ||
+    info.frenchDescription ||
+    info.description ||
+    info.details ||
+    ""
+  );
+};
 
-  if (system === "skin") return "#D9A17C";
-  if (system === "skeleton") return "#E9DCC1";
-  if (system === "muscles") return "#A83232";
-  if (system === "organs") return "#D87955";
-  if (system === "nerves") return "#E8C84A";
+const getSystemName = (system) => {
+  return SYSTEMS.find((s) => s.id === system)?.name || system || "Anatomie";
+};
 
-  if (system === "vessels") {
-    const name = normalize(info.key + " " + info.label);
 
-    if (name.includes("vein") || name.includes("veine")) {
-      return "#2868C7";
-    }
-
-    return "#D52F3D";
-  }
-
-  return info.color || "#B8C2CC";
-}
-
-/* =========================
-   MODÈLE ANATOMIQUE
-========================= */
+/* =========================================================
+   MODÈLE 3D
+========================================================= */
 
 function AnatomyModel({
   sex,
-  selected,
-  onSelect,
   visibleSystems,
-  isolated,
-  xray,
-  opacity,
+  isolatedKey,
+  selectedKey,
+  onSelect,
+  onHover,
 }) {
+  const url = modelUrl(sex);
+
   const { scene } = useGLTF(
-    modelUrl(sex),
-    false,
-    false,
+    url,
+    true,
+    true,
     (loader) => {
       loader.setMeshoptDecoder(MeshoptDecoder);
     }
   );
 
   const model = useMemo(() => {
-    const copy = scene.clone(true);
+    const clonedScene = scene.clone(true);
 
-    copy.traverse((object) => {
+    const box = new THREE.Box3().setFromObject(clonedScene);
+    const center = new THREE.Vector3();
+    const size = new THREE.Vector3();
+
+    box.getCenter(center);
+    box.getSize(size);
+
+    const height = size.y || 1;
+
+    // Ajustement automatique de la taille du corps.
+    const scale = 3.25 / height;
+
+    const position = [
+      -center.x * scale,
+      -center.y * scale,
+      -center.z * scale,
+    ];
+
+    clonedScene.traverse((object) => {
       if (!object.isMesh) return;
 
-      const info = getStructureInfo(object);
+      const info = ANATOMY_BY_KEY[object.name];
 
-      // Les éléments inconnus ne doivent jamais apparaître.
-      if (!info || !SYSTEM_IDS.includes(info.system)) {
+      // Les structures inconnues sont cachées.
+      if (!info || !SYSTEMS.some((s) => s.id === info.system)) {
         object.visible = false;
-        object.userData.anatomyInfo = null;
         return;
       }
 
       object.userData.anatomyInfo = info;
-      object.userData.anatomyKey = info.key;
+      object.userData.anatomyKey = info.key || object.name;
 
-      // Chaque structure possède son propre matériau.
-      const originals = Array.isArray(object.material)
-        ? object.material
-        : [object.material];
-
-      const materials = originals.map((original) => {
-        const material = original.clone();
-
-        material.color.set(getStructureColor(info));
-        material.roughness = 0.8;
-        material.metalness = 0;
-
-        return material;
-      });
-
-      object.material = Array.isArray(object.material)
-        ? materials
-        : materials[0];
+      // Matériaux indépendants pour chaque structure.
+      if (Array.isArray(object.material)) {
+        object.material = object.material.map((material) =>
+          material.clone()
+        );
+      } else if (object.material) {
+        object.material = object.material.clone();
+      }
     });
 
-    return copy;
+    return {
+      scene: clonedScene,
+      scale,
+      position,
+    };
   }, [scene]);
 
-  /* =========================
-     VISIBILITÉ ET SÉLECTION
-  ========================= */
-
   useEffect(() => {
-    model.traverse((object) => {
+    model.scene.traverse((object) => {
       if (!object.isMesh) return;
 
       const info = object.userData.anatomyInfo;
 
-      // Aucune structure inconnue n'est affichée.
-      if (!info || !SYSTEM_IDS.includes(info.system)) {
+      if (!info) {
         object.visible = false;
         return;
       }
 
-      const systemIsVisible =
-        visibleSystems.includes(info.system);
+      const systemVisible = visibleSystems.includes(info.system);
 
-      const structureIsVisible =
-        !isolated || info.key === isolated;
+      const isolatedVisible =
+        !isolatedKey ||
+        object.userData.anatomyKey === isolatedKey;
 
-      object.visible =
-        systemIsVisible && structureIsVisible;
+      object.visible = systemVisible && isolatedVisible;
 
       const materials = Array.isArray(object.material)
         ? object.material
@@ -178,786 +186,930 @@ function AnatomyModel({
       materials.forEach((material) => {
         if (!material) return;
 
-        // Mode radiographie.
-        material.transparent = xray;
-        material.opacity = xray ? opacity : 1;
-        material.depthWrite = !xray;
-
-        // Mise en évidence de la structure sélectionnée.
         if (material.emissive) {
-          material.emissive.set(
-            selected === info.key ? "#287BFF" : "#000000"
-          );
-
-          material.emissiveIntensity =
-            selected === info.key ? 0.6 : 0;
+          if (object.userData.anatomyKey === selectedKey) {
+            material.emissive.set("#3b82f6");
+            material.emissiveIntensity = 0.65;
+          } else {
+            material.emissive.set("#000000");
+            material.emissiveIntensity = 0;
+          }
         }
 
         material.needsUpdate = true;
       });
     });
-  }, [
-    model,
-    visibleSystems,
-    selected,
-    isolated,
-    xray,
-    opacity,
-  ]);
-
-  /* =========================
-     SÉLECTION INDIVIDUELLE
-  ========================= */
-
-  function handleClick(event) {
-    event.stopPropagation();
-
-    const object = event.object;
-    const info = object?.userData?.anatomyInfo;
-
-    if (!info || !object.visible) return;
-
-    onSelect(info.key);
-  }
+  }, [model, visibleSystems, isolatedKey, selectedKey]);
 
   return (
-    <primitive
-      object={model}
-      onClick={handleClick}
-    />
+    <group
+      scale={model.scale}
+      position={model.position}
+    >
+      <primitive object={model.scene} />
+
+      {/*
+        Les clics sont traités directement sur les meshes
+        par le gestionnaire de sélection du modèle.
+      */}
+      <SelectionHandler
+        scene={model.scene}
+        onSelect={onSelect}
+        onHover={onHover}
+      />
+    </group>
   );
 }
 
-/* =========================
-   CHARGEMENT
-========================= */
 
-function LoadingModel() {
-  return (
-    <Html center>
-      <div
-        style={{
-          color: "white",
-          background: "#172536",
-          padding: "14px 18px",
-          borderRadius: 12,
-          fontSize: 13,
-          whiteSpace: "nowrap",
-        }}
-      >
-        Chargement de l'anatomie...
-      </div>
-    </Html>
-  );
-}
+/* =========================================================
+   GESTION DE LA SÉLECTION DIRECTE
+========================================================= */
 
-/* =========================
-   APPLICATION PRINCIPALE
-========================= */
+function SelectionHandler({ scene, onSelect, onHover }) {
+  useEffect(() => {
+    scene.traverse((object) => {
+      if (!object.isMesh) return;
 
-export default function Anatomie3D() {
-  const controlsRef = useRef(null);
+      const info = object.userData.anatomyInfo;
 
-  const [sex, setSex] = useState("male");
+      if (!info) return;
 
-  const [selected, setSelected] = useState("");
-  const [isolated, setIsolated] = useState("");
-
-  const [search, setSearch] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
-
-  const [showLayers, setShowLayers] = useState(true);
-  const [showInfo, setShowInfo] = useState(true);
-
-  // La peau est masquée au départ pour voir les structures internes.
-  const [visibleSystems, setVisibleSystems] = useState([
-    "skeleton",
-    "muscles",
-    "organs",
-    "vessels",
-    "nerves",
-  ]);
-
-  const [xray, setXray] = useState(false);
-  const [opacity, setOpacity] = useState(0.3);
-
-  /* =========================
-     CATALOGUE
-  ========================= */
-
-  const structures = useMemo(
-    () => structuresFor(sex) || [],
-    [sex]
-  );
-
-  const structureMap = useMemo(() => {
-    const result = {};
-
-    structures.forEach((item) => {
-      result[item.key] = item;
+      object.userData.selectStructure = () => {
+        onSelect(info, object);
+      };
     });
+  }, [scene, onSelect]);
 
-    return result;
-  }, [structures]);
+  return null;
+}
 
-  const selectedInfo = selected
-    ? structureMap[selected] || ANATOMY_BY_KEY[selected]
-    : null;
 
-  /* =========================
-     RECHERCHE
-  ========================= */
+/* =========================================================
+   CONTRÔLE DU ZOOM SUR UNE STRUCTURE
+========================================================= */
 
-  const filteredStructures = useMemo(() => {
-    const query = normalize(search);
+function CameraFocus({ selectedObject, controlsRef }) {
+  const { camera } = useThree();
 
-    if (!query) return [];
+  useEffect(() => {
+    if (!selectedObject) return;
 
-    return structures
-      .filter((item) => {
-        const content = normalize(
-          `${item.label} ${item.key} ${item.system} ${item.category}`
-        );
+    selectedObject.updateWorldMatrix(true, true);
 
-        return content.includes(query);
-      })
-      .slice(0, 40);
-  }, [structures, search]);
+    const box = new THREE.Box3().setFromObject(selectedObject);
 
-  /* =========================
-     SÉLECTION
-  ========================= */
+    if (box.isEmpty()) return;
 
-  function selectStructure(key) {
-    const info = structureMap[key] || ANATOMY_BY_KEY[key];
+    const center = new THREE.Vector3();
+    const size = new THREE.Vector3();
 
-    if (!info) return;
+    box.getCenter(center);
+    box.getSize(size);
 
-    // Si le système est masqué, on le réactive.
-    if (!visibleSystems.includes(info.system)) {
-      setVisibleSystems((current) => [
-        ...current,
-        info.system,
-      ]);
+    const maxSize = Math.max(size.x, size.y, size.z);
+
+    const distance = Math.max(0.65, maxSize * 2.5);
+
+    const direction = camera.position.clone().sub(
+      controlsRef.current?.target || new THREE.Vector3(0, 0, 0)
+    );
+
+    if (direction.length() === 0) {
+      direction.set(0, 0, 1);
     }
 
-    setSelected(key);
-    setIsolated("");
-    setShowInfo(true);
-    setShowSearch(false);
-    setSearch("");
-  }
+    direction.normalize();
 
-  function clearSelection() {
-    setSelected("");
-    setIsolated("");
-  }
-
-  /* =========================
-     VISIBILITÉ DES SYSTÈMES
-  ========================= */
-
-  function toggleSystem(id) {
-    setVisibleSystems((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
+    camera.position.copy(
+      center.clone().add(direction.multiplyScalar(distance))
     );
 
-    setSelected("");
-    setIsolated("");
-  }
+    camera.near = 0.01;
+    camera.updateProjectionMatrix();
 
-  function showAllSystems() {
-    setVisibleSystems(SYSTEM_IDS);
-    setIsolated("");
-  }
+    if (controlsRef.current) {
+      controlsRef.current.target.copy(center);
+      controlsRef.current.update();
+    }
+  }, [selectedObject, camera, controlsRef]);
 
-  function hideAllSystems() {
+  return null;
+}
+
+
+/* =========================================================
+   SCÈNE 3D
+========================================================= */
+
+function AnatomyCanvas({
+  sex,
+  visibleSystems,
+  isolatedKey,
+  selectedKey,
+  selectedObject,
+  onSelect,
+  controlsRef,
+}) {
+  return (
+    <Canvas
+      camera={{
+        position: [0, 0, 6.8],
+        fov: 38,
+        near: 0.01,
+        far: 100,
+      }}
+      dpr={[1, 2]}
+      gl={{
+        antialias: true,
+        alpha: true,
+      }}
+      style={{
+        width: "100%",
+        height: "100%",
+      }}
+    >
+      <ambientLight intensity={1.1} />
+
+      <directionalLight
+        position={[4, 5, 5]}
+        intensity={2}
+      />
+
+      <directionalLight
+        position={[-4, 2, -3]}
+        intensity={1}
+      />
+
+      <Suspense
+        fallback={
+          <Html center>
+            <div style={{ color: "#2563eb", fontWeight: 600 }}>
+              Chargement du modèle anatomique...
+            </div>
+          </Html>
+        }
+      >
+        <AnatomyModel
+          sex={sex}
+          visibleSystems={visibleSystems}
+          isolatedKey={isolatedKey}
+          selectedKey={selectedKey}
+          onSelect={onSelect}
+        />
+      </Suspense>
+
+      <CameraFocus
+        selectedObject={selectedObject}
+        controlsRef={controlsRef}
+      />
+
+      <OrbitControls
+        ref={controlsRef}
+        makeDefault
+        enableDamping
+        dampingFactor={0.08}
+        enablePan
+        enableZoom
+        minDistance={0.35}
+        maxDistance={14}
+        target={[0, 0, 0]}
+        minPolarAngle={0}
+        maxPolarAngle={Math.PI}
+      />
+    </Canvas>
+  );
+}
+
+
+/* =========================================================
+   PAGE PRINCIPALE
+========================================================= */
+
+export default function Anatomie3D() {
+  const [sex, setSex] = useState("male");
+
+  const [visibleSystems, setVisibleSystems] =
+    useState(INITIAL_SYSTEMS);
+
+  const [search, setSearch] = useState("");
+
+  const [selected, setSelected] = useState(null);
+  const [selectedObject, setSelectedObject] = useState(null);
+
+  const [isolatedKey, setIsolatedKey] = useState(null);
+
+  const [showSystems, setShowSystems] = useState(true);
+
+  const controlsRef = useRef(null);
+
+  const catalog = useMemo(() => {
+    return structuresFor(sex) || [];
+  }, [sex]);
+
+  const filteredStructures = useMemo(() => {
+    if (!search.trim()) return [];
+
+    const term = search.toLowerCase();
+
+    return catalog.filter((item) => {
+      const name = getName(item).toLowerCase();
+
+      const key = String(item.key || "").toLowerCase();
+
+      const latin = String(
+        item.latinName || item.latin || ""
+      ).toLowerCase();
+
+      return (
+        name.includes(term) ||
+        key.includes(term) ||
+        latin.includes(term)
+      );
+    }).slice(0, 30);
+  }, [catalog, search]);
+
+  const selectStructure = useCallback((info, object = null) => {
+    if (!info) return;
+
+    setSelected(info);
+    setSelectedObject(object);
+    setIsolatedKey(null);
+
+    // Active automatiquement le système de la structure.
+    if (info.system) {
+      setVisibleSystems((previous) => {
+        if (previous.includes(info.system)) return previous;
+
+        return [...previous, info.system];
+      });
+    }
+  }, []);
+
+  const selectFromSearch = (info) => {
+    const structure = ANATOMY_BY_KEY[info.key];
+
+    setSelected(info);
+    setSelectedObject(null);
+    setIsolatedKey(null);
+
+    if (info.system) {
+      setVisibleSystems((previous) => {
+        if (previous.includes(info.system)) return previous;
+
+        return [...previous, info.system];
+      });
+    }
+
+    setSearch("");
+  };
+
+  const toggleSystem = (systemId) => {
+    setVisibleSystems((previous) => {
+      if (previous.includes(systemId)) {
+        return previous.filter((id) => id !== systemId);
+      }
+
+      return [...previous, systemId];
+    });
+
+    setIsolatedKey(null);
+  };
+
+  const showAllSystems = () => {
+    setVisibleSystems(SYSTEMS.map((s) => s.id));
+    setIsolatedKey(null);
+  };
+
+  const hideAllSystems = () => {
     setVisibleSystems([]);
-    setSelected("");
-    setIsolated("");
-  }
+    setIsolatedKey(null);
+    setSelected(null);
+    setSelectedObject(null);
+  };
 
-  /* =========================
-     ISOLATION INDIVIDUELLE
-  ========================= */
+  const isolateSelected = () => {
+    if (!selected) return;
 
-  function toggleIsolation() {
-    if (!selectedInfo) return;
+    setVisibleSystems((previous) => {
+      if (previous.includes(selected.system)) return previous;
 
-    setIsolated((current) =>
-      current === selected ? "" : selected
-    );
-  }
+      return [...previous, selected.system];
+    });
 
-  /* =========================
-     CHANGEMENT DU CORPS
-  ========================= */
+    setIsolatedKey(selected.key);
+  };
 
-  function changeSex(value) {
+  const showAllAfterIsolation = () => {
+    setIsolatedKey(null);
+  };
+
+  const changeSex = (value) => {
     setSex(value);
-    setSelected("");
-    setIsolated("");
-  }
-
-  /* =========================
-     RÉINITIALISATION
-  ========================= */
-
-  function resetView() {
-    setSelected("");
-    setIsolated("");
-    setSearch("");
-
-    setVisibleSystems([
-      "skeleton",
-      "muscles",
-      "organs",
-      "vessels",
-      "nerves",
-    ]);
-
-    setXray(false);
-    setOpacity(0.3);
-
-    controlsRef.current?.reset();
-  }
-
-  /* =========================
-     STYLES
-  ========================= */
-
-  const pageStyle = {
-    background: "#0B1420",
-    color: "#F8FAFC",
-    minHeight: "100%",
-    width: "100%",
-    overflow: "hidden",
-    fontFamily: "Arial, sans-serif",
+    setSelected(null);
+    setSelectedObject(null);
+    setIsolatedKey(null);
   };
 
-  const buttonStyle = {
-    border: "1px solid #334155",
-    background: "#172536",
-    color: "#F8FAFC",
-    borderRadius: 12,
-    padding: "10px 13px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    fontSize: 13,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
+  const zoomIn = () => {
+    if (!controlsRef.current) return;
+
+    const camera = controlsRef.current.object;
+
+    camera.position.multiplyScalar(0.8);
+    controlsRef.current.update();
   };
 
-  const activeButton = {
-    ...buttonStyle,
-    background: "#2563EB",
-    borderColor: "#2563EB",
-  };
+  const zoomOut = () => {
+    if (!controlsRef.current) return;
 
-  /* =========================
-     AFFICHAGE
-  ========================= */
+    const camera = controlsRef.current.object;
+
+    camera.position.multiplyScalar(1.2);
+    controlsRef.current.update();
+  };
 
   return (
-    <div style={pageStyle}>
+    <div className="anatomy-page">
+
+      <style jsx global>{`
+        .anatomy-page {
+          min-height: 100vh;
+          background: #f4f7fb;
+          color: #172b45;
+          padding: 16px;
+          font-family: Arial, sans-serif;
+        }
+
+        .anatomy-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+        }
+
+        .anatomy-title {
+          font-size: 23px;
+          font-weight: 800;
+          color: #10243a;
+        }
+
+        .anatomy-subtitle {
+          color: #718096;
+          font-size: 13px;
+          margin-top: 4px;
+        }
+
+        .anatomy-card {
+          background: white;
+          border: 1px solid #e5eaf1;
+          border-radius: 15px;
+          box-shadow: 0 4px 16px rgba(20, 40, 70, 0.04);
+        }
+
+        .anatomy-toolbar {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+
+        .anatomy-button {
+          border: 1px solid #e0e7f0;
+          background: white;
+          color: #334155;
+          padding: 9px 12px;
+          border-radius: 9px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 13px;
+          font-weight: 600;
+        }
+
+        .anatomy-button:hover {
+          background: #eff6ff;
+          border-color: #93c5fd;
+        }
+
+        .anatomy-button.active {
+          background: #2563eb;
+          color: white;
+          border-color: #2563eb;
+        }
+
+        .anatomy-layout {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 290px;
+          gap: 14px;
+          align-items: stretch;
+        }
+
+        .anatomy-viewer {
+          height: 650px;
+          min-height: 480px;
+          position: relative;
+          overflow: hidden;
+          background:
+            radial-gradient(circle at center, #ffffff 0%, #f0f5fb 75%);
+          border-radius: 15px;
+        }
+
+        .anatomy-side {
+          padding: 16px;
+          min-width: 0;
+        }
+
+        .anatomy-section-title {
+          font-weight: 800;
+          font-size: 15px;
+          margin-bottom: 12px;
+          color: #172b45;
+        }
+
+        .anatomy-search {
+          width: 100%;
+          padding: 12px;
+          border: 1px solid #dbe4ef;
+          border-radius: 10px;
+          outline: none;
+          font-size: 13px;
+          background: white;
+          color: #172b45;
+        }
+
+        .anatomy-search:focus {
+          border-color: #3b82f6;
+        }
+
+        .anatomy-search-results {
+          position: absolute;
+          top: 45px;
+          left: 0;
+          right: 0;
+          z-index: 20;
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          max-height: 260px;
+          overflow-y: auto;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+
+        .anatomy-result {
+          width: 100%;
+          border: none;
+          background: white;
+          text-align: left;
+          padding: 11px;
+          cursor: pointer;
+          color: #334155;
+          border-bottom: 1px solid #f1f5f9;
+          font-size: 13px;
+        }
+
+        .anatomy-result:hover {
+          background: #eff6ff;
+        }
+
+        .anatomy-system {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 11px;
+          border-radius: 9px;
+          border: 1px solid #e5eaf1;
+          background: white;
+          margin-bottom: 7px;
+          cursor: pointer;
+          color: #334155;
+          font-size: 13px;
+          font-weight: 600;
+        }
+
+        .anatomy-system.active {
+          background: #eff6ff;
+          border-color: #93c5fd;
+          color: #1d4ed8;
+        }
+
+        .anatomy-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          display: inline-block;
+          margin-right: 8px;
+        }
+
+        .anatomy-info-box {
+          background: #f8fafc;
+          border: 1px solid #e5eaf1;
+          padding: 14px;
+          border-radius: 12px;
+          margin-top: 12px;
+        }
+
+        .anatomy-info-name {
+          font-size: 17px;
+          font-weight: 800;
+          color: #10243a;
+          margin-bottom: 8px;
+        }
+
+        .anatomy-info-text {
+          font-size: 13px;
+          color: #64748b;
+          line-height: 1.6;
+        }
+
+        .anatomy-floating {
+          position: absolute;
+          z-index: 10;
+          display: flex;
+          gap: 7px;
+          flex-wrap: wrap;
+        }
+
+        .anatomy-floating.top {
+          top: 12px;
+          left: 12px;
+          right: 12px;
+        }
+
+        .anatomy-floating.bottom {
+          bottom: 14px;
+          right: 14px;
+        }
+
+        .anatomy-floating button {
+          background: white;
+          border: 1px solid #dbe4ef;
+          padding: 9px;
+          border-radius: 9px;
+          cursor: pointer;
+          color: #334155;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .anatomy-floating button:hover {
+          background: #eff6ff;
+        }
+
+        .anatomy-label {
+          background: #10243a;
+          color: white;
+          padding: 7px 11px;
+          border-radius: 8px;
+          font-size: 12px;
+          white-space: nowrap;
+        }
+
+        @media (max-width: 850px) {
+          .anatomy-layout {
+            grid-template-columns: 1fr;
+          }
+
+          .anatomy-viewer {
+            height: 570px;
+            min-height: 450px;
+          }
+
+          .anatomy-side {
+            padding: 14px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .anatomy-page {
+            padding: 9px;
+          }
+
+          .anatomy-title {
+            font-size: 20px;
+          }
+
+          .anatomy-viewer {
+            height: 510px;
+            min-height: 430px;
+          }
+
+          .anatomy-button {
+            padding: 8px 9px;
+            font-size: 12px;
+          }
+        }
+      `}</style>
+
 
       {/* EN-TÊTE */}
 
-      <div
-        style={{
-          padding: "16px 14px 10px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
+      <div className="anatomy-header">
         <div>
-          <div style={{ fontSize: 21, fontWeight: 800 }}>
+          <div className="anatomy-title">
             Anatomie 3D
           </div>
 
-          <div
-            style={{
-              color: "#94A3B8",
-              fontSize: 12,
-              marginTop: 4,
-            }}
-          >
-            Exploration anatomique interactive
+          <div className="anatomy-subtitle">
+            Explore le corps humain et ses structures anatomiques.
           </div>
         </div>
 
-        <button
-          style={buttonStyle}
-          onClick={() => setShowSearch(!showSearch)}
-        >
-          <Search size={17} />
-          Rechercher
-        </button>
+        <div className="anatomy-toolbar">
+          <button
+            className={`anatomy-button ${sex === "male" ? "active" : ""}`}
+            onClick={() => changeSex("male")}
+          >
+            <User size={16} />
+            Homme
+          </button>
+
+          <button
+            className={`anatomy-button ${sex === "female" ? "active" : ""}`}
+            onClick={() => changeSex("female")}
+          >
+            <User size={16} />
+            Femme
+          </button>
+        </div>
       </div>
+
 
       {/* RECHERCHE */}
-
-      {showSearch && (
-        <div style={{ padding: "5px 14px 12px" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              background: "#172536",
-              border: "1px solid #334155",
-              borderRadius: 12,
-              padding: "0 12px",
-            }}
-          >
-            <Search size={18} color="#94A3B8" />
-
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un muscle, un os, un organe..."
-              autoFocus
-              style={{
-                flex: 1,
-                minWidth: 0,
-                background: "transparent",
-                border: 0,
-                outline: 0,
-                color: "white",
-                padding: 13,
-                fontSize: 14,
-              }}
-            />
-
-            <button
-              onClick={() => {
-                setSearch("");
-                setShowSearch(false);
-              }}
-              style={{
-                border: 0,
-                background: "transparent",
-                color: "#94A3B8",
-                cursor: "pointer",
-              }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {search.trim() !== "" && (
-            <div
-              style={{
-                marginTop: 7,
-                background: "#172536",
-                borderRadius: 12,
-                maxHeight: 230,
-                overflowY: "auto",
-              }}
-            >
-              {filteredStructures.length === 0 ? (
-                <div
-                  style={{
-                    padding: 14,
-                    color: "#94A3B8",
-                  }}
-                >
-                  Aucune structure trouvée.
-                </div>
-              ) : (
-                filteredStructures.map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => selectStructure(item.key)}
-                    style={{
-                      width: "100%",
-                      padding: 12,
-                      background: "transparent",
-                      border: 0,
-                      borderBottom: "1px solid #26384B",
-                      color: "white",
-                      textAlign: "left",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ fontWeight: 600 }}>
-                      {item.label}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "#94A3B8",
-                        marginTop: 3,
-                      }}
-                    >
-                      {item.system} · {item.category}
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* COMMANDES */}
-
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          padding: "4px 14px 12px",
-          overflowX: "auto",
-        }}
-      >
-        <button
-          style={sex === "male" ? activeButton : buttonStyle}
-          onClick={() => changeSex("male")}
-        >
-          Homme
-        </button>
-
-        <button
-          style={sex === "female" ? activeButton : buttonStyle}
-          onClick={() => changeSex("female")}
-        >
-          Femme
-        </button>
-
-        <button
-          style={buttonStyle}
-          onClick={() => setShowLayers(!showLayers)}
-        >
-          <Layers size={16} />
-          Systèmes
-          <ChevronDown size={14} />
-        </button>
-
-        <button
-          style={xray ? activeButton : buttonStyle}
-          onClick={() => setXray(!xray)}
-        >
-          <Scan size={16} />
-          Rayon X
-        </button>
-
-        <button
-          style={buttonStyle}
-          onClick={resetView}
-          title="Réinitialiser"
-        >
-          <RotateCcw size={16} />
-        </button>
-      </div>
-
-      {/* PANNEAU DES SYSTÈMES */}
-
-      {showLayers && (
-        <div style={{ padding: "0 14px 12px" }}>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: 9,
-            }}
-          >
-            <button
-              style={buttonStyle}
-              onClick={showAllSystems}
-            >
-              Tout afficher
-            </button>
-
-            <button
-              style={buttonStyle}
-              onClick={hideAllSystems}
-            >
-              Tout masquer
-            </button>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-            }}
-          >
-            {SYSTEMS.map((system) => {
-              const active = visibleSystems.includes(system.id);
-
-              return (
-                <button
-                  key={system.id}
-                  onClick={() => toggleSystem(system.id)}
-                  style={{
-                    ...buttonStyle,
-                    background: active ? "#24364A" : "#111C29",
-                    borderColor: active ? system.color : "#334155",
-                    opacity: active ? 1 : 0.55,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 9,
-                      height: 9,
-                      borderRadius: "50%",
-                      background: system.color,
-                    }}
-                  />
-
-                  {system.label}
-
-                  {active ? (
-                    <Eye size={14} />
-                  ) : (
-                    <EyeOff size={14} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* TRANSPARENCE */}
-
-      {xray && (
-        <div
-          style={{
-            padding: "0 16px 12px",
-            color: "#CBD5E1",
-            fontSize: 12,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: 6,
-            }}
-          >
-            <span>Transparence</span>
-            <span>{Math.round(opacity * 100)} %</span>
-          </div>
-
-          <input
-            type="range"
-            min="0.1"
-            max="0.8"
-            step="0.05"
-            value={opacity}
-            onChange={(e) => setOpacity(Number(e.target.value))}
-            style={{ width: "100%" }}
-          />
-        </div>
-      )}
-
-      {/* SCÈNE 3D */}
 
       <div
         style={{
           position: "relative",
-          height: "min(66vh, 650px)",
-          minHeight: 390,
-          background:
-            "radial-gradient(circle at 50% 42%, #26394B 0%, #101D2B 55%, #0B1420 100%)",
+          marginBottom: 13,
+          maxWidth: 550,
         }}
       >
-        <Canvas
-          camera={{
-            position: [0, 0, 4.5],
-            fov: 38,
-          }}
-          dpr={[1, 1.7]}
-          gl={{
-            antialias: true,
-            alpha: true,
-          }}
-        >
-          <ambientLight intensity={1.1} />
-
-          <directionalLight
-            position={[4, 6, 5]}
-            intensity={2}
-          />
-
-          <directionalLight
-            position={[-4, 2, -3]}
-            intensity={0.8}
-          />
-
-          <Suspense fallback={<LoadingModel />}>
-            <AnatomyModel
-              sex={sex}
-              selected={selected}
-              onSelect={selectStructure}
-              visibleSystems={visibleSystems}
-              isolated={isolated}
-              xray={xray}
-              opacity={opacity}
-            />
-          </Suspense>
-
-          <OrbitControls
-            ref={controlsRef}
-            enablePan={false}
-            enableZoom
-            enableRotate
-            minDistance={2}
-            maxDistance={9}
-            rotateSpeed={0.8}
-            zoomSpeed={0.8}
-          />
-        </Canvas>
-
-        {/* INFORMATIONS */}
-
-        <div
+        <Search
+          size={17}
           style={{
             position: "absolute",
             top: 12,
-            right: 12,
+            left: 12,
+            color: "#94a3b8",
           }}
-        >
-          <button
-            onClick={() => setShowInfo(!showInfo)}
-            style={{
-              ...buttonStyle,
-              width: 43,
-              height: 43,
-              padding: 0,
-            }}
-          >
-            <Info size={19} />
-          </button>
-        </div>
+        />
 
-        {/* STRUCTURE SÉLECTIONNÉE */}
+        <input
+          className="anatomy-search"
+          style={{ paddingLeft: 38 }}
+          placeholder="Rechercher un muscle, un os, un organe..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
-        {selectedInfo && showInfo && (
-          <div
-            style={{
-              position: "absolute",
-              left: 12,
-              right: 12,
-              bottom: 12,
-              background: "rgba(15, 29, 44, 0.97)",
-              border: "1px solid #3B5269",
-              borderRadius: 17,
-              padding: 15,
-              boxShadow: "0 8px 30px #0008",
-              backdropFilter: "blur(12px)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 10,
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    color: "#60A5FA",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                  }}
+        {search.trim() !== "" && (
+          <div className="anatomy-search-results">
+            {filteredStructures.length > 0 ? (
+              filteredStructures.map((item) => (
+                <button
+                  key={item.key}
+                  className="anatomy-result"
+                  onClick={() => selectFromSearch(item)}
                 >
-                  Structure sélectionnée
-                </div>
+                  <strong>{getName(item)}</strong>
 
-                <div
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 800,
-                    marginTop: 5,
-                  }}
-                >
-                  {selectedInfo.label}
-                </div>
-
-                <div
-                  style={{
-                    color: "#A8B7C8",
-                    fontSize: 12,
-                    marginTop: 5,
-                  }}
-                >
-                  {selectedInfo.system} · {selectedInfo.category}
-                </div>
+                  <div style={{ color: "#94a3b8", marginTop: 3 }}>
+                    {getSystemName(item.system)}
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div style={{ padding: 13, fontSize: 13, color: "#64748b" }}>
+                Aucune structure trouvée.
               </div>
-
-              <button
-                onClick={clearSelection}
-                style={{
-                  border: 0,
-                  background: "transparent",
-                  color: "#94A3B8",
-                  alignSelf: "flex-start",
-                  cursor: "pointer",
-                }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <button
-              onClick={toggleIsolation}
-              style={{
-                ...buttonStyle,
-                width: "100%",
-                marginTop: 13,
-                background:
-                  isolated === selected ? "#2563EB" : "#263B52",
-              }}
-            >
-              {isolated === selected
-                ? "Afficher toutes les structures"
-                : "Isoler cette structure"}
-            </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* AIDE */}
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: 16,
-          padding: "12px 8px 8px",
-          color: "#94A3B8",
-          fontSize: 11,
-          flexWrap: "wrap",
-        }}
-      >
-        <span>Un doigt : tourner</span>
-        <span>Deux doigts : zoomer</span>
-        <span>Toucher : sélectionner</span>
-      </div>
+      {/* CONTENU */}
 
-      {/* CRÉDIT DU MODÈLE */}
+      <div className="anatomy-layout">
 
-      <div
-        style={{
-          padding: "5px 12px 14px",
-          textAlign: "center",
-          color: "#64748B",
-          fontSize: 9,
-        }}
-      >
-        {ATTRIBUTION}
+        {/* VUE 3D */}
+
+        <div className="anatomy-card anatomy-viewer">
+
+          <AnatomyCanvas
+            sex={sex}
+            visibleSystems={visibleSystems}
+            isolatedKey={isolatedKey}
+            selectedKey={selected?.key}
+            selectedObject={selectedObject}
+            onSelect={selectStructure}
+            controlsRef={controlsRef}
+          />
+
+          {/* COMMANDES */}
+
+          <div className="anatomy-floating top">
+            {isolatedKey && (
+              <button
+                onClick={showAllAfterIsolation}
+                title="Afficher de nouveau les autres structures"
+              >
+                <Layers size={17} />
+                Voir les autres
+              </button>
+            )}
+
+            {selected && !isolatedKey && (
+              <button
+                onClick={isolateSelected}
+                title="Isoler cette structure"
+              >
+                <Scan size={17} />
+                Isoler
+              </button>
+            )}
+          </div>
+
+          <div className="anatomy-floating bottom">
+            <button
+              onClick={zoomIn}
+              title="Zoom avant"
+            >
+              <ZoomIn size={19} />
+            </button>
+
+            <button
+              onClick={zoomOut}
+              title="Zoom arrière"
+            >
+              <ZoomOut size={19} />
+            </button>
+          </div>
+
+          {selected && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: 14,
+                left: 14,
+                zIndex: 5,
+                maxWidth: "65%",
+              }}
+            >
+              <div className="anatomy-label">
+                {getName(selected)}
+              </div>
+            </div>
+          )}
+
+        </div>
+
+
+        {/* PANNEAU LATÉRAL */}
+
+        <div className="anatomy-card anatomy-side">
+
+          <div className="anatomy-section-title">
+            <Layers
+              size={17}
+              style={{ display: "inline", marginRight: 7 }}
+            />
+            Systèmes anatomiques
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 7,
+              marginBottom: 12,
+            }}
+          >
+            <button
+              className="anatomy-button"
+              onClick={showAllSystems}
+            >
+              <Eye size={15} />
+              Tout afficher
+            </button>
+
+            <button
+              className="anatomy-button"
+              onClick={hideAllSystems}
+            >
+              <EyeOff size={15} />
+              Tout masquer
+            </button>
+          </div>
+
+          {SYSTEMS.map((system) => {
+            const active = visibleSystems.includes(system.id);
+
+            return (
+              <button
+                key={system.id}
+                className={`anatomy-system ${active ? "active" : ""}`}
+                onClick={() => toggleSystem(system.id)}
+              >
+                <span>
+                  <span
+                    className="anatomy-dot"
+                    style={{ background: system.color }}
+                  />
+
+                  {system.name}
+                </span>
+
+                {active ? (
+                  <Eye size={16} />
+                ) : (
+                  <EyeOff size={16} />
+                )}
+              </button>
+            );
+          })}
+
+
+          {/* INFORMATIONS */}
+
+          <div className="anatomy-info-box">
+
+            <div className="anatomy-section-title">
+              <Info
+                size={16}
+                style={{ display: "inline", marginRight: 6 }}
+              />
+              Structure sélectionnée
+            </div>
+
+            {selected ? (
+              <>
+                <div className="anatomy-info-name">
+                  {getName(selected)}
+                </div>
+
+                <div className="anatomy-info-text">
+                  <strong>Système :</strong>{" "}
+                  {getSystemName(selected.system)}
+                </div>
+
+                {selected.latinName && (
+                  <div className="anatomy-info-text">
+                    <strong>Nom latin :</strong>{" "}
+                    {selected.latinName}
+                  </div>
+                )}
+
+                {getDescription(selected) && (
+                  <div
+                    className="anatomy-info-text"
+                    style={{ marginTop: 9 }}
+                  >
+                    {getDescription(selected)}
+                  </div>
+                )}
+
+                <button
+                  className="anatomy-button active"
+                  style={{
+                    width: "100%",
+                    justifyContent: "center",
+                    marginTop: 13,
+                  }}
+                  onClick={isolateSelected}
+                >
+                  <Scan size={16} />
+                  Isoler cette structure
+                </button>
+              </>
+            ) : (
+              <div className="anatomy-info-text">
+                Sélectionne directement un muscle, un os ou un organe
+                dans le modèle 3D pour afficher ses informations.
+                Tu pourras ensuite l'isoler et zoomer pour l'étudier.
+              </div>
+            )}
+
+          </div>
+
+          <div
+            style={{
+              fontSize: 11,
+              color: "#94a3b8",
+              lineHeight: 1.5,
+              marginTop: 15,
+            }}
+          >
+            {ATTRIBUTION}
+          </div>
+
+        </div>
+
       </div>
     </div>
   );
-}
+          }
