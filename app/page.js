@@ -1467,6 +1467,7 @@ const response = await fetch("/api/ia", {
     revision: "Révisions",
     exams: "Examens",
     ai: "Assistant IA",
+    patient: "Patient virtuel",
     admin: "Administration",
     settings: "Paramètres"
   };
