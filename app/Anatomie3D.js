@@ -18,6 +18,8 @@ import {
   EyeOff,
   ZoomIn,
   ZoomOut,
+  ArrowUp,
+  ArrowDown,
   Info,
   Layers,
   X,
@@ -424,9 +426,6 @@ export default function Anatomie3D() {
 
   /* =====================================================
      RESTAURATION ET SURVEILLANCE DE LA SESSION SUPABASE
-
-     On attend la session existante avant de rediriger.
-     Une session valide donne directement accès à l'Atlas.
   ===================================================== */
 
   useEffect(() => {
@@ -459,7 +458,6 @@ export default function Anatomie3D() {
       }
     });
 
-    // Vérification explicite de la session déjà enregistrée.
     supabase.auth
       .getSession()
       .then(({ data, error }) => {
@@ -600,7 +598,9 @@ export default function Anatomie3D() {
     setIsolate(true);
   };
 
-  /* ZOOM */
+  /* =====================================================
+     COMMANDES DE ZOOM
+  ===================================================== */
 
   const zoomIn = () => {
     const controls = controlsRef.current;
@@ -634,6 +634,44 @@ export default function Anatomie3D() {
     camera.position.copy(
       controls.target.clone().add(direction)
     );
+
+    controls.update();
+  };
+
+  /* =====================================================
+     DÉPLACEMENT VERTICAL DE LA VUE
+     
+     Ces deux commandes déplacent simultanément la caméra
+     et la cible des OrbitControls.
+
+     La distance entre la caméra et la cible ne change pas :
+     le niveau de zoom reste donc identique.
+  ===================================================== */
+
+  const moveViewUp = () => {
+    const controls = controlsRef.current;
+
+    if (!controls) return;
+
+    const camera = controls.object;
+    const step = 0.25;
+
+    camera.position.y += step;
+    controls.target.y += step;
+
+    controls.update();
+  };
+
+  const moveViewDown = () => {
+    const controls = controlsRef.current;
+
+    if (!controls) return;
+
+    const camera = controls.object;
+    const step = 0.25;
+
+    camera.position.y -= step;
+    controls.target.y -= step;
 
     controls.update();
   };
@@ -1030,7 +1068,7 @@ export default function Anatomie3D() {
             </div>
           )}
 
-          {/* COMMANDES DE ZOOM */}
+          {/* COMMANDES DE NAVIGATION ET DE ZOOM */}
 
           <div
             style={{
@@ -1046,6 +1084,7 @@ export default function Anatomie3D() {
             <button
               onClick={zoomIn}
               title="Zoom avant"
+              aria-label="Zoom avant"
               style={controlButton}
             >
               <ZoomIn size={19} />
@@ -1054,14 +1093,50 @@ export default function Anatomie3D() {
             <button
               onClick={zoomOut}
               title="Zoom arrière"
+              aria-label="Zoom arrière"
               style={controlButton}
             >
               <ZoomOut size={19} />
             </button>
 
+            <div
+              style={{
+                height: "1px",
+                background: "#52657A",
+                margin: "2px 3px",
+              }}
+            />
+
+            <button
+              onClick={moveViewUp}
+              title="Déplacer la vue vers le haut"
+              aria-label="Déplacer la vue vers le haut"
+              style={controlButton}
+            >
+              <ArrowUp size={19} />
+            </button>
+
+            <button
+              onClick={moveViewDown}
+              title="Déplacer la vue vers le bas"
+              aria-label="Déplacer la vue vers le bas"
+              style={controlButton}
+            >
+              <ArrowDown size={19} />
+            </button>
+
+            <div
+              style={{
+                height: "1px",
+                background: "#52657A",
+                margin: "2px 3px",
+              }}
+            />
+
             <button
               onClick={() => setShowInfo((v) => !v)}
               title="Informations"
+              aria-label="Informations"
               style={controlButton}
             >
               <Info size={19} />
@@ -1253,7 +1328,9 @@ export default function Anatomie3D() {
                 Touche ensuite une structure du modèle pour
                 afficher son nom et ses informations. Fais
                 glisser ton doigt pour tourner le corps et
-                utilise deux doigts pour zoomer.
+                utilise deux doigts pour zoomer. Les boutons
+                fléchés permettent de déplacer la vue vers le
+                haut ou vers le bas sans changer le zoom.
               </p>
             </section>
           )}
