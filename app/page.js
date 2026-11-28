@@ -1477,12 +1477,13 @@ const response = await fetch("/api/ia", {
   };
 
   const navItems = [
-    ...NAVIGATION,
-    ...(isAdmin
-      ? [{ id: "admin", label: "Administration", icon: ShieldCheck }]
-      : []),
-    { id: "settings", label: "Paramètres", icon: Settings }
-  ];
+  ...NAVIGATION,
+  { id: "anatomie", label: "Anatomie 3D", icon: Activity },
+  ...(isAdmin
+    ? [{ id: "admin", label: "Administration", icon: ShieldCheck }]
+    : []),
+  { id: "settings", label: "Paramètres", icon: Settings }
+];
 
   /* =====================================================
      AFFICHAGE
